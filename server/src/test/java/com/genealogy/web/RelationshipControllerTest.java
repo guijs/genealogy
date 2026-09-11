@@ -6,6 +6,7 @@ import com.genealogy.service.RelationshipService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.KinshipStore;
 import com.genealogy.store.PersonStore;
+import com.genealogy.store.ProjectionStore;
 import com.genealogy.web.filter.AuthFilter;
 import com.genealogy.web.filter.FamilyMembershipFilter;
 import com.genealogy.web.filter.WriteAccessFilter;
@@ -24,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(RelationshipController.class)
-@Import({FamilyStore.class, PersonStore.class, KinshipStore.class, RelationshipService.class,
+@Import({FamilyStore.class, PersonStore.class, KinshipStore.class, ProjectionStore.class, RelationshipService.class,
         AuthFilter.class, FamilyMembershipFilter.class, WriteAccessFilter.class})
 class RelationshipControllerTest {
 
@@ -39,6 +40,9 @@ class RelationshipControllerTest {
 
     @Autowired
     private KinshipStore kinshipStore;
+
+    @Autowired
+    private ProjectionStore projectionStore;
 
     private static final UUID FAMILY_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID ADMIN_USER_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
@@ -56,6 +60,7 @@ class RelationshipControllerTest {
         familyStore.clear();
         personStore.clear();
         kinshipStore.clear();
+        projectionStore.clear();
 
         familyStore.createFamily(FAMILY_ID, FAMILY_NAME);
         familyStore.addMemberWithRole(FAMILY_ID, ADMIN_USER_ID, Role.ADMIN);
