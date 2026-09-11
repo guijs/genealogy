@@ -9,6 +9,7 @@ import com.genealogy.service.PersonService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
+import com.genealogy.store.UnionStore;
 import com.genealogy.web.filter.AuthFilter;
 import com.genealogy.web.filter.FamilyMembershipFilter;
 import com.genealogy.web.filter.WriteAccessFilter;
@@ -28,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({FamilyController.class, GraphController.class})
-@Import({FamilyStore.class, PersonStore.class, ProjectionStore.class,
+@Import({FamilyStore.class, PersonStore.class, ProjectionStore.class, UnionStore.class,
         PersonService.class, GraphService.class,
         AuthFilter.class, FamilyMembershipFilter.class, WriteAccessFilter.class})
 class PersonGraphIntegrationTest {
