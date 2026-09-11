@@ -1,6 +1,7 @@
 /**
- * Person 写入 API client（Phase2-A）
+ * Person API client（Phase2-A）
  *
+ * - GET /api/v1/families/{familyId}/persons — 获取家族成员列表
  * - POST /api/v1/families/{familyId}/persons — 创建成员
  * - PATCH /api/v1/families/{familyId}/persons/{personId} — 更新成员
  *
@@ -30,13 +31,14 @@ export interface PersonResponse {
 }
 
 export class PersonApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly code?: string,
-  ) {
+  readonly status: number
+  readonly code?: string
+
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'PersonApiError'
+    this.status = status
+    this.code = code
   }
 
   static fromStatus(status: number, url: string): PersonApiError {
@@ -80,6 +82,37 @@ function ensureRealApi(): void {
       'MOCK_MODE',
     )
   }
+}
+
+export interface PersonsListResponse {
+  persons: PersonResponse[]
+}
+
+/**
+ * 获取家族成员列表
+ * GET /api/v1/families/{familyId}/persons
+ *
+ * @returns PersonsListResponse { persons: PersonResponse[] }
+ * @throws PersonApiError 401/404
+ */
+export async function listPersons(
+  familyId: string,
+): Promise<PersonsListResponse> {
+  ensureRealApi()
+
+  const base = apiBase()
+  const url = `${base}/api/v1/families/${encodeURIComponent(familyId)}/persons`
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: authHeaders(),
+  })
+
+  if (!res.ok) {
+    throw PersonApiError.fromStatus(res.status, url)
+  }
+
+  return (await res.json()) as PersonsListResponse
 }
 
 /**

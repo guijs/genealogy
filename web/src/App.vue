@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import TreePage from './pages/TreePage.vue'
+import { RouterView } from 'vue-router'
 </script>
 
 <template>
-  <TreePage />
+  <RouterView />
 </template>

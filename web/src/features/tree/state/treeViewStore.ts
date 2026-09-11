@@ -3,6 +3,7 @@ import { computed, ref, shallowRef } from 'vue'
 import {
   addRelationship,
   type AddRelationshipParams,
+  DEFAULT_GRAPH_DEPTH,
   DEMO_GRAPH_PARAMS,
   fetchFamilyGraph,
   isUsingGraphApi,
@@ -10,6 +11,7 @@ import {
 import {
   createPerson as apiCreatePerson,
   updatePerson as apiUpdatePerson,
+  listPersons as apiListPersons,
   PersonApiError,
   type CreatePersonRequest,
   type UpdatePersonRequest,
@@ -51,6 +53,8 @@ export const useTreeViewStore = defineStore('treeView', () => {
   const endMarriageFormOpen = ref(false)
   /** 当前要结束的婚姻 ID */
   const endMarriageId = ref<string | null>(null)
+  /** 空家族状态（新家族无成员时） */
+  const emptyFamily = ref(false)
 
   const layout = computed(() => {
     if (!graph.value) return null
@@ -87,6 +91,7 @@ export const useTreeViewStore = defineStore('treeView', () => {
   async function loadDemo(familyId?: string) {
     loading.value = true
     usingGraphApi.value = isUsingGraphApi()
+    emptyFamily.value = false
     const targetFamilyId = familyId ?? DEMO_GRAPH_PARAMS.familyId
     try {
       graph.value = await fetchFamilyGraph({
@@ -95,6 +100,56 @@ export const useTreeViewStore = defineStore('treeView', () => {
         depth: DEMO_GRAPH_PARAMS.depth,
       })
       currentFamilyId.value = targetFamilyId
+      focusPersonId.value = graph.value.rootPersonId
+      zoom.value = 1
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * 加载指定家族的图。真 API 模式下根据 familyId 加载家族树。
+   * @param familyId 家族 ID
+   * @param rootPersonId 可选的根人物 ID；若不传则自动选取家族第一个成员
+   */
+  async function loadFamily(familyId: string, rootPersonId?: string) {
+    loading.value = true
+    usingGraphApi.value = isUsingGraphApi()
+    emptyFamily.value = false
+    currentFamilyId.value = familyId
+
+    try {
+      let rootId = rootPersonId
+
+      // 若无 rootPersonId，获取家族成员列表并取第一个
+      if (!rootId && isUsingGraphApi()) {
+        try {
+          const { persons } = await apiListPersons(familyId)
+          if (persons.length === 0) {
+            // 新家族无成员，显示空状态
+            emptyFamily.value = true
+            graph.value = null
+            return
+          }
+          rootId = persons[0].id
+        } catch (e) {
+          // 列表失败时回退到演示模式
+          console.warn('Failed to list persons, falling back to demo:', e)
+          await loadDemo(familyId)
+          return
+        }
+      }
+
+      // 若仍无 rootId（mock 模式且未传 rootPersonId），使用演示默认值
+      if (!rootId) {
+        rootId = DEMO_GRAPH_PARAMS.rootPersonId
+      }
+
+      graph.value = await fetchFamilyGraph({
+        familyId,
+        rootPersonId: rootId,
+        depth: DEFAULT_GRAPH_DEPTH,
+      })
       focusPersonId.value = graph.value.rootPersonId
       zoom.value = 1
     } finally {
@@ -351,12 +406,14 @@ export const useTreeViewStore = defineStore('treeView', () => {
     addSpouseFormOpen,
     endMarriageFormOpen,
     endMarriageId,
+    emptyFamily,
     layout,
     selectedPerson,
     selectedKin,
     truncated,
     truncateReason,
     loadDemo,
+    loadFamily,
     reloadGraph,
     selectPerson,
     closeDrawer,
