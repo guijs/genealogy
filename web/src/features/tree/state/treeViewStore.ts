@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
+  addRelationship,
+  type AddRelationshipParams,
   DEMO_GRAPH_PARAMS,
   fetchFamilyGraph,
   isUsingGraphApi,
@@ -81,6 +83,42 @@ export const useTreeViewStore = defineStore('treeView', () => {
     focusPersonId.value = personId
   }
 
+  /**
+   * 重新加载当前家族图投影。
+   * 在写操作（如 addParentChild）后调用，使新边可见。
+   */
+  async function reloadGraph() {
+    if (!graph.value) return
+    loading.value = true
+    usingGraphApi.value = isUsingGraphApi()
+    try {
+      graph.value = await fetchFamilyGraph({
+        familyId: graph.value.familyId,
+        rootPersonId: focusPersonId.value,
+        depth: graph.value.depth,
+      })
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * 添加亲子关系并刷新投影。
+   * 仅在使用真 API 时可用。
+   */
+  async function addParentChild(
+    params: Omit<AddRelationshipParams, 'familyId'>,
+  ) {
+    if (!graph.value) {
+      throw new Error('addParentChild: no graph loaded')
+    }
+    await addRelationship({
+      familyId: graph.value.familyId,
+      ...params,
+    })
+    await reloadGraph()
+  }
+
   return {
     graph,
     focusPersonId,
@@ -98,5 +136,7 @@ export const useTreeViewStore = defineStore('treeView', () => {
     selectPerson,
     closeDrawer,
     setFocus,
+    reloadGraph,
+    addParentChild,
   }
 })

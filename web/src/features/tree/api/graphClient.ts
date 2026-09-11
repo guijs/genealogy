@@ -17,7 +17,12 @@ import {
   DEMO_ROOT_PERSON_ID,
   fetchGraphFixture,
 } from './fixture'
-import type { GraphProjection } from './types'
+import type {
+  AddRelationshipRequest,
+  AddRelationshipResponse,
+  GraphProjection,
+  RelationshipType,
+} from './types'
 
 export interface FetchFamilyGraphParams {
   familyId: string
@@ -108,4 +113,66 @@ export const DEMO_GRAPH_PARAMS: FetchFamilyGraphParams = {
   familyId: DEMO_FAMILY_ID,
   rootPersonId: DEMO_ROOT_PERSON_ID,
   depth: DEFAULT_GRAPH_DEPTH,
+}
+
+export interface AddRelationshipParams {
+  familyId: string
+  parentId: string
+  childId: string
+  /** Java RelationType.fromString 格式：biological_father | biological_mother | adoptive_father | adoptive_mother */
+  relationshipType: RelationshipType
+}
+
+/**
+ * 添加亲子关系。
+ *
+ * POST /api/v1/families/{familyId}/relationships
+ * Body: { parent_id, child_id, relationship_type } (snake_case)
+ * Header: X-User-Id
+ *
+ * relationship_type 必须为 Java RelationType.fromString 支持的值：
+ *   biological_father | biological_mother | adoptive_father | adoptive_mother
+ *
+ * 仅在使用真 API 时可用。调用后需 reloadGraph 刷新投影。
+ * @throws Error 若未开启真 API 或请求失败
+ */
+export async function addRelationship(
+  params: AddRelationshipParams,
+): Promise<AddRelationshipResponse> {
+  if (!isUsingGraphApi()) {
+    throw new Error(
+      'addRelationship requires real API. Set VITE_USE_GRAPH_API=true or VITE_GRAPH_API_BASE.',
+    )
+  }
+
+  const { familyId, parentId, childId, relationshipType } = params
+  if (!familyId) {
+    throw new Error('addRelationship: familyId is required')
+  }
+
+  const base = graphApiBase()
+  const url = `${base}/api/v1/families/${encodeURIComponent(familyId)}/relationships`
+
+  const body: AddRelationshipRequest = {
+    parent_id: parentId,
+    child_id: childId,
+    relationship_type: relationshipType,
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...authHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    throw new Error(
+      `POST relationship failed: ${res.status} ${res.statusText} — ${errText}`,
+    )
+  }
+  return (await res.json()) as AddRelationshipResponse
 }

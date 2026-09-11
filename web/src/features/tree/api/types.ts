@@ -113,3 +113,28 @@ export interface LayoutResult {
   edges: PositionedEdge[]
   unions: Union[]
 }
+
+/**
+ * Java RelationType.fromString 接受的关系类型字符串。
+ * 格式为 subtype_role（如 biological_father）。
+ */
+export type RelationshipType =
+  | 'biological_father'
+  | 'biological_mother'
+  | 'adoptive_father'
+  | 'adoptive_mother'
+
+/**
+ * POST /api/v1/families/{familyId}/relationships 请求体。
+ * Java 端使用 @JsonProperty 注解，字段为 snake_case。
+ * relationship_type 必须为 Java RelationType.fromString 支持的值。
+ */
+export interface AddRelationshipRequest {
+  parent_id: string
+  child_id: string
+  relationship_type: RelationshipType
+}
+
+export interface AddRelationshipResponse {
+  success: boolean
+}
