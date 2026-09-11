@@ -24,6 +24,9 @@ public class WriteAccessFilter extends OncePerRequestFilter {
     private static final Pattern RELATIONSHIPS_PATH_PATTERN = 
             Pattern.compile("^/api/v1/families/[^/]+/relationships$");
 
+    private static final Pattern MEDIA_UPLOAD_URL_PATH_PATTERN = 
+            Pattern.compile("^/api/v1/families/[^/]+/media/upload-url$");
+
     private static final Pattern PERSONS_POST_PATH_PATTERN = 
             Pattern.compile("^/api/v1/families/[^/]+/persons$");
 
@@ -94,6 +97,9 @@ public class WriteAccessFilter extends OncePerRequestFilter {
             return true;
         }
         if ("POST".equals(method) && PERSONS_RESTORE_PATH_PATTERN.matcher(path).matches()) {
+            return true;
+        }
+        if ("POST".equals(method) && MEDIA_UPLOAD_URL_PATH_PATTERN.matcher(path).matches()) {
             return true;
         }
         return false;
