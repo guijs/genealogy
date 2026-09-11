@@ -1,36 +1,38 @@
 # Genealogy
 
-Modern family genealogy software (P0).
+Modern family genealogy software.
 
 ## Stack
 
-- **Backend:** Go 1.22+ (modular monolith)
-- **Frontend:** Vue 3 + TypeScript + Vite (see [PR #2](https://github.com/guijs/genealogy/pull/2))
+- **Backend:** Spring Boot 3.x (JDK 17) — modular monolith under `server/`
+- **ORM:** MyBatis (no JPA/Hibernate)
+- **Migrations:** Flyway (no Liquibase)
 - **Database:** PostgreSQL 16
-- **Architecture:** Modular monolith with clean architecture
+- **Frontend:** Vue 3 + TypeScript + Vite under `web/`
 
 ## Project Layout
 
 ```
 .
-├── cmd/api/              # API server entrypoint
-├── internal/
-│   ├── domain/           # Business logic (person, kinship, family, projection)
-│   ├── app/              # Application services
-│   ├── adapter/
-│   │   ├── http/         # HTTP handlers (chi router)
-│   │   ├── postgres/     # PostgreSQL repositories
-│   │   └── objectstore/  # File/media storage
-│   └── platform/         # Infrastructure (config, logging)
-├── migrations/           # PostgreSQL migrations (golang-migrate)
+├── server/               # Active Java backend (Spring Boot)
+│   ├── src/main/java/    # Application code
+│   ├── src/main/resources/
+│   │   ├── application.yml
+│   │   └── db/migration/ # Flyway migrations
+│   └── pom.xml           # Maven build (strict dependency allowlist)
+├── web/                  # Vue 3 frontend (unchanged)
+├── legacy/go/            # Archived Go backend (read-only reference)
 ├── docker-compose.yml    # PostgreSQL for local dev
-├── go.mod
 └── README.md
 ```
 
-**Note:** Go code lives at repo root (NOT under `backend/`). Frontend lives in `web/` via [PR #2](https://github.com/guijs/genealogy/pull/2) (NOT `frontend/` or `apps/web/`).
-
 ## Development
+
+### Prerequisites
+
+- JDK 17+
+- Maven 3.8+
+- Docker & Docker Compose (for PostgreSQL)
 
 ### Backend
 
@@ -38,48 +40,59 @@ Modern family genealogy software (P0).
 # Start PostgreSQL
 docker-compose up -d
 
-# Run API server
-go run ./cmd/api
+# Build and run
+cd server
+./mvnw spring-boot:run
 
-# Run tests
-go test ./...
+# Or build JAR
+./mvnw clean package
+java -jar target/genealogy-server-0.0.1-SNAPSHOT.jar
+
+# Run tests (no live PG required)
+./mvnw test
 ```
 
-## Current Status (P0 Scaffold + B1)
+### Health Check
+
+```bash
+curl http://localhost:8080/healthz
+# {"status":"ok"}
+```
+
+### Frontend
+
+See [web/README.md](web/README.md) for frontend development instructions.
+
+## Current Status (Phase 0)
 
 ### Implemented
-- ✅ GET /healthz endpoint
-- ✅ B1 IDOR Foundation:
-  - RequireFamilyMember middleware (404 for non-members)
-  - RequireAuth middleware (X-User-Id header, temporary dev stub)
-  - GET /api/v1/families/{familyId}
-  - GET /api/v1/families/{familyId}/persons (stub)
-  - POST /api/v1/families/{familyId}/relationships
-- ✅ Domain kinship graph with invariant validation:
-  - Self-loop detection
-  - Cycle detection (mutual parent, 3-hop cycles)
-  - Parent uniqueness (at most one bio/adoptive father/mother each)
-  - Bio + adoptive coexistence allowed
-- ✅ Pure domain unit tests for kinship invariants
-- ✅ HTTP integration tests for IDOR protection
+- ✅ Spring Boot scaffold with strict dependency allowlist
+- ✅ `GET /healthz` endpoint
+- ✅ Flyway migration directory (empty, Phase 1)
+- ✅ MyBatis configuration
 
-### Not Yet Implemented
-- ❌ B1: Persons CRUD (full implementation)
-- ❌ B4: Graph query (`GET /api/v1/families/{familyId}/graph`)
-- ❌ Database migrations
-- ❌ Real authentication (IdP integration)
-- ❌ Frontend (see [PR #2](https://github.com/guijs/genealogy/pull/2))
+### Not Yet Implemented (Phase 1+)
+- ❌ Person/Family/Relationship CRUD
+- ❌ Kinship graph (ported from Go)
+- ❌ Database schema migrations
+- ❌ Authentication
 
 ## Design Decisions
 
-- **NO `person.parent_id` column** - relationships stored in separate kinship graph
-- **NO Neo4j** - graph operations done in-memory with PostgreSQL as persistence
-- **NO microservices** - modular monolith architecture
-- **Family-scoped resources** - all API routes under `/api/v1/families/{familyId}/...`
+- **Java backend only** — Go code archived in `legacy/go/` for reference
+- **MyBatis over JPA** — explicit SQL, no ORM magic
+- **Flyway only** — simple versioned migrations
+- **No distributed stack** — no Spring Cloud, Gateway, Config Server, message brokers
+- **Modular monolith** — clean architecture without microservices complexity
+
+## Dependency Policy
+
+See [server/DEPENDENCY_ALLOWLIST.md](server/DEPENDENCY_ALLOWLIST.md) for the strict
+dependency allowlist and denial rules.
 
 ## Gates
 
 Tests must pass before merge:
 ```bash
-go test ./...
+cd server && ./mvnw test
 ```

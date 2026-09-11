@@ -4,8 +4,10 @@
 *.dll
 *.so
 *.dylib
-/api
-/cmd/api/api
+
+# Legacy Go binaries (archived)
+legacy/go/api
+legacy/go/cmd/api/api
 
 # Test binary
 *.test
@@ -19,6 +21,7 @@ coverage.html
 .vscode/
 *.swp
 *.swo
+*.iml
 
 # OS
 .DS_Store
@@ -36,6 +39,13 @@ web/.vite/
 web/*.tsbuildinfo
 web/vite.config.d.ts
 web/vite.config.js
+
+# Maven / Java
+server/target/
+*.class
+*.jar
+!server/mvnw.jar
+*.war
 
 # Logs
 *.log
