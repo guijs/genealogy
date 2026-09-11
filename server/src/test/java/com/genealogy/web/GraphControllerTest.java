@@ -18,6 +18,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class GraphControllerTest extends BaseIntegrationTest {
 
+    private static final String AUTH_HEADER = "Authorization";
+
     @Autowired
     private FamilyStore familyStore;
 
@@ -54,7 +56,7 @@ class GraphControllerTest extends BaseIntegrationTest {
     @Test
     void getGraph_withNonMemberUser_returns404() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", NON_MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(NON_MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
@@ -63,7 +65,7 @@ class GraphControllerTest extends BaseIntegrationTest {
     @Test
     void getGraph_withoutRootPersonId_returns400() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("rootPersonId query parameter required"));
     }
@@ -71,7 +73,7 @@ class GraphControllerTest extends BaseIntegrationTest {
     @Test
     void getGraph_withInvalidRootPersonId_returns400() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", "not-a-uuid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("invalid rootPersonId"));
@@ -80,7 +82,7 @@ class GraphControllerTest extends BaseIntegrationTest {
     @Test
     void getGraph_withDepth9_returns400() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString())
                         .param("depth", "9"))
                 .andExpect(status().isBadRequest())
@@ -90,7 +92,7 @@ class GraphControllerTest extends BaseIntegrationTest {
     @Test
     void getGraph_withDepth10_returns400() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString())
                         .param("depth", "10"))
                 .andExpect(status().isBadRequest())
@@ -100,7 +102,7 @@ class GraphControllerTest extends BaseIntegrationTest {
     @Test
     void getGraph_withDefaultDepth_returns3() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.depth").value(3));
@@ -109,7 +111,7 @@ class GraphControllerTest extends BaseIntegrationTest {
     @Test
     void getGraph_withInvalidDepth_usesDefault() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString())
                         .param("depth", "invalid"))
                 .andExpect(status().isOk())
@@ -119,7 +121,7 @@ class GraphControllerTest extends BaseIntegrationTest {
     @Test
     void getGraph_withZeroDepth_usesDefault() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString())
                         .param("depth", "0"))
                 .andExpect(status().isOk())
@@ -129,7 +131,7 @@ class GraphControllerTest extends BaseIntegrationTest {
     @Test
     void getGraph_withNegativeDepth_usesDefault() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString())
                         .param("depth", "-1"))
                 .andExpect(status().isOk())
@@ -147,7 +149,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.familyId").value(FAMILY_ID.toString()))
@@ -177,7 +179,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 MarriageStatus.DIVORCED, "1995-06-15", "2010-03-20", "irreconcilable differences"));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.marriages").isArray())
@@ -207,7 +209,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 ParentChildSubtype.ADOPTIVE, ParentRole.FATHER, null, true));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.relationships.length()").value(1))
@@ -221,7 +223,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 hiddenPersonId, FAMILY_ID, "Hidden Person", Gender.MALE, 1990, null, true));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons.length()").value(1))
@@ -240,7 +242,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 MarriageStatus.ACTIVE, "2000-01-01", null, null));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.marriages.length()").value(0));
@@ -258,7 +260,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.relationships.length()").value(0));
@@ -290,7 +292,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString())
                         .param("depth", "2"))
                 .andExpect(status().isOk())
@@ -327,7 +329,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString())
                         .param("depth", "1"))
                 .andExpect(status().isOk())
@@ -349,7 +351,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 otherPersonId, otherFamilyId, "Other Person", Gender.MALE, 1980, null, false));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", otherPersonId.toString()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
@@ -360,7 +362,7 @@ class GraphControllerTest extends BaseIntegrationTest {
         UUID nonExistentPersonId = UUID.randomUUID();
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", nonExistentPersonId.toString()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
@@ -369,7 +371,7 @@ class GraphControllerTest extends BaseIntegrationTest {
     @Test
     void getGraph_withDepth8_returns200() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString())
                         .param("depth", "8"))
                 .andExpect(status().isOk())
@@ -387,7 +389,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons[?(@.id=='" + deceasedId.toString() + "')].deceased").value(hasItem(true)))
@@ -412,7 +414,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, marriageId, false));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.relationships[0].marriageId").value(marriageId.toString()));
@@ -429,7 +431,7 @@ class GraphControllerTest extends BaseIntegrationTest {
                 MarriageStatus.ACTIVE, null, null, null));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
                         .param("rootPersonId", ROOT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons.length()").value(2))

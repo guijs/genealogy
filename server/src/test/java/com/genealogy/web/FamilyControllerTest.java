@@ -18,6 +18,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class FamilyControllerTest extends BaseIntegrationTest {
 
+    private static final String AUTH_HEADER = "Authorization";
+
     @Autowired
     private FamilyStore familyStore;
 
@@ -53,20 +55,19 @@ class FamilyControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.error").value("authentication required"));
     }
 
-    // Test 2: Invalid X-User-Id → 401
+    // Test 2: Invalid JWT → 401
     @Test
-    void getFamily_withInvalidUserId_returns401() throws Exception {
+    void getFamily_withInvalidJwt_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID)
-                        .header("X-User-Id", "not-a-uuid"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("invalid user id"));
+                        .header(AUTH_HEADER, "Bearer invalid-jwt-token"))
+                .andExpect(status().isUnauthorized());
     }
 
     // Test 3: Valid user, non-member → 404 on GetFamily
     @Test
     void getFamily_withNonMemberUser_returns404() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID)
-                        .header("X-User-Id", NON_MEMBER_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(NON_MEMBER_USER_ID)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
     }
@@ -75,7 +76,7 @@ class FamilyControllerTest extends BaseIntegrationTest {
     @Test
     void listPersons_withNonMemberUser_returns404() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", NON_MEMBER_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(NON_MEMBER_USER_ID)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
     }
@@ -84,7 +85,7 @@ class FamilyControllerTest extends BaseIntegrationTest {
     @Test
     void getFamily_withMemberUser_returns200WithFamilyData() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID)
-                        .header("X-User-Id", MEMBER_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(FAMILY_ID.toString()))
                 .andExpect(jsonPath("$.name").value(FAMILY_NAME));
@@ -94,7 +95,7 @@ class FamilyControllerTest extends BaseIntegrationTest {
     @Test
     void listPersons_withMemberUser_returns200WithPersons() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", MEMBER_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons").isArray())
                 .andExpect(jsonPath("$.persons.length()").value(2))
@@ -108,7 +109,7 @@ class FamilyControllerTest extends BaseIntegrationTest {
     void getFamily_withUnknownFamilyId_returns404() throws Exception {
         UUID unknownFamilyId = UUID.fromString("99999999-9999-9999-9999-999999999999");
         mockMvc.perform(get("/api/v1/families/" + unknownFamilyId)
-                        .header("X-User-Id", MEMBER_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
     }
@@ -117,7 +118,7 @@ class FamilyControllerTest extends BaseIntegrationTest {
     @Test
     void getFamily_withInvalidFamilyIdFormat_returns404() throws Exception {
         mockMvc.perform(get("/api/v1/families/not-a-uuid")
-                        .header("X-User-Id", MEMBER_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
     }

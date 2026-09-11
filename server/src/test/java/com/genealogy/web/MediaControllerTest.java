@@ -18,6 +18,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class MediaControllerTest extends BaseIntegrationTest {
 
+    private static final String AUTH_HEADER = "Authorization";
+
     @Autowired
     private FamilyStore familyStore;
 
@@ -57,7 +59,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", NON_MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(NON_MEMBER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -72,7 +74,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isForbidden())
@@ -87,7 +89,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -104,7 +106,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -119,7 +121,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -134,7 +136,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -149,7 +151,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -164,7 +166,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -180,7 +182,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """.formatted(sizeTooLarge);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -196,7 +198,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """.formatted(sizeExact);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -214,7 +216,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", editorUserId.toString())
+                        .header(AUTH_HEADER, bearerToken(editorUserId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -229,7 +231,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -245,7 +247,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + unknownFamilyId + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -260,7 +262,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -275,7 +277,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -290,7 +292,7 @@ class MediaControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())

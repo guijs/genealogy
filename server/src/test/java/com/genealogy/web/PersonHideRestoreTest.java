@@ -27,6 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class PersonHideRestoreTest extends BaseIntegrationTest {
 
+    private static final String AUTH_HEADER = "Authorization";
+
     @Autowired
     private FamilyStore familyStore;
 
@@ -73,7 +75,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
     @Test
     void hidePerson_nonMember_returns404() throws Exception {
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/hide")
-                        .header("X-User-Id", NON_MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(NON_MEMBER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
@@ -82,7 +84,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
     @Test
     void hidePerson_viewer_returns403() throws Exception {
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/hide")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("write access required"));
@@ -92,7 +94,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
     void hidePerson_unknownPerson_returns404() throws Exception {
         UUID unknownPersonId = UUID.randomUUID();
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + unknownPersonId + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
@@ -105,7 +107,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
         familyStore.addMemberWithRole(otherFamilyId, ADMIN_USER_ID, Role.ADMIN);
 
         mockMvc.perform(post("/api/v1/families/" + otherFamilyId + "/persons/" + PERSON_ID + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
@@ -114,14 +116,14 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
     @Test
     void hidePerson_noActiveUnion_returns200_andExcludedFromGraph() throws Exception {
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
         assertThat(projectionStore.getPerson(PERSON_ID).get().isHidden()).isTrue();
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PARTNER_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(1)))
@@ -139,7 +141,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
                 MarriageStatus.ACTIVE, "2020-01-01", null, null));
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("person has an active union; set confirm_hide_with_active_union to true or end the union first"));
@@ -160,7 +162,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk());
@@ -176,7 +178,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
         unionStore.addUnion(union);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
@@ -194,7 +196,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
     @Test
     void restorePerson_viewer_returns403() throws Exception {
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/restore")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("write access required"));
@@ -206,14 +208,14 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
                 PERSON_ID, FAMILY_ID, "Test Person", Gender.MALE, 1980, null, true));
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/restore")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
         assertThat(projectionStore.getPerson(PERSON_ID).get().isHidden()).isFalse();
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(1)))
@@ -224,7 +226,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
     void restorePerson_unknownPerson_returns404() throws Exception {
         UUID unknownPersonId = UUID.randomUUID();
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + unknownPersonId + "/restore")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
@@ -240,7 +242,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(patch("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID)
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk());
@@ -249,7 +251,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
         assertThat(projectionStore.getPerson(PERSON_ID).get().getDisplayName()).isEqualTo("Updated Person");
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PARTNER_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(1)))
@@ -271,13 +273,13 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PARTNER_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(1)))
@@ -291,7 +293,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
                 PERSON_ID, FAMILY_ID, "Test Person", Gender.MALE, 1980, null, true));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(2)));
     }
@@ -302,7 +304,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
         familyStore.addMemberWithRole(FAMILY_ID, editorUserId, Role.EDITOR);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/hide")
-                        .header("X-User-Id", editorUserId.toString())
+                        .header(AUTH_HEADER, bearerToken(editorUserId))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
@@ -318,7 +320,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
                 PERSON_ID, FAMILY_ID, "Test Person", Gender.MALE, 1980, null, true));
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/restore")
-                        .header("X-User-Id", editorUserId.toString())
+                        .header(AUTH_HEADER, bearerToken(editorUserId))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
@@ -328,7 +330,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
     @Test
     void hidePerson_emptyBody_noActiveUnion_returns200() throws Exception {
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PERSON_ID + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isOk());
@@ -339,7 +341,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
     @Test
     void hidePerson_invalidPersonIdFormat_returns404() throws Exception {
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/not-a-uuid/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
@@ -348,7 +350,7 @@ class PersonHideRestoreTest extends BaseIntegrationTest {
     @Test
     void restorePerson_invalidPersonIdFormat_returns404() throws Exception {
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/not-a-uuid/restore")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));

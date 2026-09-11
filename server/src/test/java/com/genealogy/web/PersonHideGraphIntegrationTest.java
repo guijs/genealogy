@@ -20,6 +20,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class PersonHideGraphIntegrationTest extends BaseIntegrationTest {
 
+    private static final String AUTH_HEADER = "Authorization";
+
     @Autowired
     private FamilyStore familyStore;
 
@@ -67,7 +69,7 @@ class PersonHideGraphIntegrationTest extends BaseIntegrationTest {
                 ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, unionId, false));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", CHILD_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(3)))
@@ -78,13 +80,13 @@ class PersonHideGraphIntegrationTest extends BaseIntegrationTest {
             {"confirm_hide_with_active_union": true}
             """;
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PARENT_ID + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(hideBody))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", CHILD_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(2)))
@@ -100,19 +102,19 @@ class PersonHideGraphIntegrationTest extends BaseIntegrationTest {
                 ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PARENT_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(2)))
                 .andExpect(jsonPath("$.relationships", hasSize(1)));
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + CHILD_ID + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PARENT_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(1)))
@@ -141,7 +143,7 @@ class PersonHideGraphIntegrationTest extends BaseIntegrationTest {
                 ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, unionId, false));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", CHILD_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(3)))
@@ -152,13 +154,13 @@ class PersonHideGraphIntegrationTest extends BaseIntegrationTest {
             {"confirm_hide_with_active_union": true}
             """;
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PARENT_ID + "/hide")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(hideBody))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", CHILD_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(2)))
@@ -167,12 +169,12 @@ class PersonHideGraphIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.relationships[0].parentId").value(PARTNER_ID.toString()));
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PARENT_ID + "/restore")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", CHILD_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(3)))

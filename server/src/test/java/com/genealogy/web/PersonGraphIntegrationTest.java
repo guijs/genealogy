@@ -22,6 +22,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class PersonGraphIntegrationTest extends BaseIntegrationTest {
 
+    private static final String AUTH_HEADER = "Authorization";
+
     @Autowired
     private FamilyStore familyStore;
 
@@ -55,7 +57,7 @@ class PersonGraphIntegrationTest extends BaseIntegrationTest {
             """;
 
         String response = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -65,7 +67,7 @@ class PersonGraphIntegrationTest extends BaseIntegrationTest {
                 .readTree(response).get("id").asText();
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", newPersonId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(1)))
@@ -80,13 +82,13 @@ class PersonGraphIntegrationTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(patch("/api/v1/families/" + FAMILY_ID + "/persons/" + EXISTING_PERSON_ID)
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", EXISTING_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons[0].displayName").value("Updated Name"));
@@ -99,7 +101,7 @@ class PersonGraphIntegrationTest extends BaseIntegrationTest {
             """;
 
         String response = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -109,7 +111,7 @@ class PersonGraphIntegrationTest extends BaseIntegrationTest {
                 .readTree(response).get("id").asText();
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .param("rootPersonId", newPersonId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons[0].displayName").value("AdminCreated Person"));
@@ -122,7 +124,7 @@ class PersonGraphIntegrationTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isForbidden())
@@ -136,13 +138,13 @@ class PersonGraphIntegrationTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons", hasSize(2)));
     }

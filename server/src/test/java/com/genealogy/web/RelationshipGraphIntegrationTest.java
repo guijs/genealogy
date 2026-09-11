@@ -23,6 +23,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
 
+    private static final String AUTH_HEADER = "Authorization";
+
     @Autowired
     private FamilyStore familyStore;
 
@@ -63,14 +65,14 @@ class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PARENT_PERSON_ID, CHILD_PERSON_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/relationships")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PARENT_PERSON_ID.toString())
                         .param("depth", "3"))
                 .andExpect(status().isOk())
@@ -98,13 +100,13 @@ class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PARENT_PERSON_ID, CHILD_PERSON_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/relationships")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .param("rootPersonId", PARENT_PERSON_ID.toString())
                         .param("depth", "3"))
                 .andExpect(status().isOk())
@@ -121,7 +123,7 @@ class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PARENT_PERSON_ID, CHILD_PERSON_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/relationships")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isForbidden())
@@ -135,7 +137,7 @@ class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PARENT_PERSON_ID, CHILD_PERSON_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/relationships")
-                        .header("X-User-Id", NON_MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(NON_MEMBER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -145,7 +147,7 @@ class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
     @Test
     void writeThenReadGraph_nonMemberGetReturns404() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", NON_MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(NON_MEMBER_USER_ID))
                         .param("rootPersonId", PARENT_PERSON_ID.toString()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
@@ -158,13 +160,13 @@ class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PARENT_PERSON_ID, CHILD_PERSON_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/relationships")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PARENT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.relationships[0].subtype").value("adoptive"))
@@ -178,13 +180,13 @@ class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PARENT_PERSON_ID, CHILD_PERSON_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/relationships")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PARENT_PERSON_ID.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.relationships[0].subtype").value("adoptive"))
@@ -201,7 +203,7 @@ class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PARENT_PERSON_ID, CHILD_PERSON_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/relationships")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body1))
                 .andExpect(status().isCreated());
@@ -211,13 +213,13 @@ class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(CHILD_PERSON_ID, grandchildId);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/relationships")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body2))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PARENT_PERSON_ID.toString())
                         .param("depth", "3"))
                 .andExpect(status().isOk())
@@ -232,13 +234,13 @@ class RelationshipGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PARENT_PERSON_ID, CHILD_PERSON_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/relationships")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", CHILD_PERSON_ID.toString())
                         .param("depth", "3"))
                 .andExpect(status().isOk())
