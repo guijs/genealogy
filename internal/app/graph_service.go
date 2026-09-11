@@ -43,6 +43,29 @@ func (s *GraphService) GetGraph(req GetGraphRequest) (*projection.GraphProjectio
 
 	s.traverse(req.RootPersonID, req.FamilyID, depth, 0, visited, persons, marriages, relationships, &truncated)
 
+	// Filter out dangling edges when truncated
+	// Remove relationships where parent or child is not in the persons set
+	for id, r := range relationships {
+		if _, hasParent := persons[r.ParentID]; !hasParent {
+			delete(relationships, id)
+			continue
+		}
+		if _, hasChild := persons[r.ChildID]; !hasChild {
+			delete(relationships, id)
+		}
+	}
+
+	// Remove marriages where either partner is not in the persons set
+	for id, m := range marriages {
+		if _, hasPartner1 := persons[m.Partner1ID]; !hasPartner1 {
+			delete(marriages, id)
+			continue
+		}
+		if _, hasPartner2 := persons[m.Partner2ID]; !hasPartner2 {
+			delete(marriages, id)
+		}
+	}
+
 	personDTOs := make([]projection.PersonDTO, 0)
 	for _, p := range persons {
 		if p.Hidden {
