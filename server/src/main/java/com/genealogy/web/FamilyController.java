@@ -1,10 +1,14 @@
 package com.genealogy.web;
 
 import com.genealogy.domain.family.Family;
+import com.genealogy.domain.family.Membership;
+import com.genealogy.domain.family.Role;
 import com.genealogy.domain.person.Person;
 import com.genealogy.service.PersonService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
+import com.genealogy.web.dto.AddMemberRequest;
+import com.genealogy.web.dto.AddMemberResponse;
 import com.genealogy.web.dto.CreatePersonRequest;
 import com.genealogy.web.dto.ErrorResponse;
 import com.genealogy.web.dto.FamilyResponse;
@@ -15,6 +19,7 @@ import com.genealogy.web.dto.UpdatePersonRequest;
 import com.genealogy.web.filter.FamilyMembershipFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -169,5 +174,50 @@ public class FamilyController {
         } catch (PersonService.PersonNotFoundException e) {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         }
+    }
+
+    @PostMapping("/members")
+    @Transactional
+    public ResponseEntity<?> addMember(HttpServletRequest request,
+                                       @RequestBody AddMemberRequest body) {
+        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
+        if (familyId == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        Membership membership = (Membership) request.getAttribute(FamilyMembershipFilter.MEMBERSHIP_ATTRIBUTE);
+        if (membership == null || membership.getRole() != Role.ADMIN) {
+            return ResponseEntity.status(403).body(new ErrorResponse("admin access required"));
+        }
+
+        if (body.getUserId() == null || body.getUserId().isBlank()) {
+            return ResponseEntity.status(400).body(new ErrorResponse("user_id is required"));
+        }
+
+        UUID newUserId;
+        try {
+            newUserId = UUID.fromString(body.getUserId());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(new ErrorResponse("invalid user_id"));
+        }
+
+        if (body.getRole() == null || body.getRole().isBlank()) {
+            return ResponseEntity.status(400).body(new ErrorResponse("role is required"));
+        }
+
+        Role role;
+        try {
+            role = Role.valueOf(body.getRole().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(new ErrorResponse("invalid role"));
+        }
+
+        if (familyStore.isMember(familyId, newUserId)) {
+            return ResponseEntity.status(409).body(new ErrorResponse("user is already a member"));
+        }
+
+        familyStore.addMemberWithRole(familyId, newUserId, role);
+
+        return ResponseEntity.status(201).body(new AddMemberResponse(newUserId.toString(), role.getValue()));
     }
 }
