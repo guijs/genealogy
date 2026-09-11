@@ -3,9 +3,9 @@ package com.genealogy.store;
 import com.genealogy.domain.person.Person;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -16,6 +16,10 @@ public class PersonStore {
 
     public void addPerson(Person person) {
         persons.put(person.getId(), person);
+    }
+
+    public Optional<Person> getPerson(UUID id) {
+        return Optional.ofNullable(persons.get(id));
     }
 
     public List<Person> listByFamily(UUID familyId) {
