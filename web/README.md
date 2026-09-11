@@ -49,6 +49,10 @@ VITE_USE_GRAPH_API=false
 
 # 真 API 基址；设置非空也会切到真 API。留空 = 同源相对路径
 VITE_GRAPH_API_BASE=
+
+# 真 API 认证用户 ID（使用真 API 时必须设置）
+# 值为 family member UUID，发送为 X-User-Id header
+VITE_GRAPH_USER_ID=
 ```
 
 切到真 API 的两种方式（任一即可）：
@@ -56,10 +60,13 @@ VITE_GRAPH_API_BASE=
 1. `VITE_USE_GRAPH_API=true`
 2. 设置非空 `VITE_GRAPH_API_BASE`（例如 `http://localhost:8080`）
 
+**注意**：使用真 API 时必须设置 `VITE_GRAPH_USER_ID` 为有效的 family member UUID，否则请求将抛出错误。该值作为 `X-User-Id` header 发送给后端 RequireAuth middleware。
+
 真请求形如：
 
 ```http
 GET {VITE_GRAPH_API_BASE}/api/v1/families/{familyId}/graph?rootPersonId=&depth=
+X-User-Id: {VITE_GRAPH_USER_ID}
 ```
 
 路径**必须带 familyId**（B1）；不接受无 family 的 person-only 路由。  
