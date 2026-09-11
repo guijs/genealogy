@@ -358,7 +358,12 @@ export const useTreeViewStore = defineStore('treeView', () => {
    * 在写操作（如 addParentChild）后调用，使新边可见。
    */
   async function reloadGraph() {
-    if (!graph.value) return
+    if (!graph.value) {
+      if (currentFamilyId.value) {
+        await loadFamily(currentFamilyId.value)
+      }
+      return
+    }
     loading.value = true
     usingGraphApi.value = isUsingGraphApi()
     try {
