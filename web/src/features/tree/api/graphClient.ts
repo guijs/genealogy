@@ -112,7 +112,7 @@ export interface AddRelationshipParams {
  *
  * POST /api/v1/families/{familyId}/relationships
  * Body: { parent_id, child_id, relationship_type } (snake_case)
- * Header: X-User-Id
+ * Header: Authorization: Bearer <token>
  *
  * relationship_type 必须为 Java RelationType.fromString 支持的值：
  *   biological_father | biological_mother | adoptive_father | adoptive_mother
