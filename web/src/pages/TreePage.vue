@@ -97,6 +97,15 @@ function goToCreateFamily() {
   router.push({ name: 'createFamily' })
 }
 
+function goToMembers() {
+  const familyId = route.query.familyId as string | undefined
+  if (familyId) {
+    router.push({ name: 'members', query: { familyId } })
+  } else {
+    router.push({ name: 'members' })
+  }
+}
+
 watch(addSpouseFormOpen, (open) => {
   if (open) {
     selectedSpouseId.value = ''
@@ -171,6 +180,14 @@ function handleCancelEndMarriage() {
           @click="goToCreateFamily"
         >
           创建家族
+        </button>
+        <button
+          v-if="usingGraphApi"
+          type="button"
+          class="btn-create-family"
+          @click="goToMembers"
+        >
+          成员管理
         </button>
         <button
           v-if="usingGraphApi"
