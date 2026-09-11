@@ -8,8 +8,10 @@ import {
   FamilyApiError,
   type FamilyResponse,
 } from '../features/tree/api/familyClient'
+import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const familyName = ref('')
 const submitting = ref(false)
@@ -78,6 +80,11 @@ function navigateToFamilyTree(familyId: string) {
 function goToTree() {
   router.push({ name: 'tree' })
 }
+
+function handleLogout() {
+  authStore.logout()
+  router.push({ name: 'login' })
+}
 </script>
 
 <template>
@@ -95,9 +102,19 @@ function goToTree() {
           </template>
         </p>
       </div>
-      <button type="button" class="btn-secondary" @click="goToTree">
-        返回家族树
-      </button>
+      <div class="topbar-actions">
+        <button type="button" class="btn-secondary" @click="goToTree">
+          返回家族树
+        </button>
+        <button
+          v-if="authStore.isAuthenticated && usingGraphApi"
+          type="button"
+          class="btn-logout"
+          @click="handleLogout"
+        >
+          登出
+        </button>
+      </div>
     </header>
 
     <main class="content">
@@ -388,6 +405,25 @@ function goToTree() {
 
 .btn-secondary:hover {
   background: #f5f5f5;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-logout {
+  padding: 10px 16px;
+  border: 1px solid #c53030;
+  border-radius: 6px;
+  background: #fff;
+  color: #c53030;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.btn-logout:hover {
+  background: #fef0f0;
 }
 
 .toast {

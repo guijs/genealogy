@@ -8,13 +8,14 @@
  * - 客户端预检 MIME：仅 jpeg/png/webp
  * - 客户端预检大小：>0 且 ≤5MB
  * - 仅在真 API 模式下可用（VITE_USE_GRAPH_API / VITE_GRAPH_API_BASE）
- * - 认证：X-User-Id header = VITE_GRAPH_USER_ID
+ * - 认证：Authorization: Bearer <token>
  * - 响应 { upload_url, storage_key }；调方需显示两者
  * - Mock 模式下不可伪造成功
  * - 不含整树写回
  * - Real PUT to upload_url 是可选的
  */
 import { isUsingGraphApi } from './graphClient'
+import { getAuthHeadersWithContentType, AuthRequiredError } from './auth'
 
 /** 允许的 MIME 类型 */
 export const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
@@ -130,17 +131,13 @@ function apiBase(): string {
 }
 
 function authHeaders(): HeadersInit {
-  const userId = (import.meta.env.VITE_GRAPH_USER_ID as string | undefined)?.trim()
-  if (!userId) {
-    throw new MediaApiError(
-      '请先设置 VITE_GRAPH_USER_ID 环境变量',
-      401,
-      'AUTH_MISSING',
-    )
-  }
-  return {
-    'X-User-Id': userId,
-    'Content-Type': 'application/json',
+  try {
+    return getAuthHeadersWithContentType()
+  } catch (err) {
+    if (err instanceof AuthRequiredError) {
+      throw new MediaApiError('请先登录', 401, 'AUTH_MISSING')
+    }
+    throw err
   }
 }
 

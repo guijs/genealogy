@@ -7,11 +7,12 @@
  * 硬约束：
  * - Body snake_case：{ partner_a_id, partner_b_id, started_at? }
  * - 仅在真 API 模式下可用（VITE_USE_GRAPH_API / VITE_GRAPH_API_BASE）
- * - 认证：X-User-Id header = VITE_GRAPH_USER_ID
+ * - 认证：Authorization: Bearer <token>
  * - 成功后调方调 reloadGraph() 刷新树
  * - 422 dual-active 返回中文提示
  */
 import { isUsingGraphApi } from './graphClient'
+import { getAuthHeadersWithContentType, AuthRequiredError } from './auth'
 
 /** POST /api/v1/families/{familyId}/unions 请求体 (snake_case) */
 export interface CreateUnionRequest {
@@ -93,17 +94,13 @@ function apiBase(): string {
 }
 
 function authHeaders(): HeadersInit {
-  const userId = (import.meta.env.VITE_GRAPH_USER_ID as string | undefined)?.trim()
-  if (!userId) {
-    throw new UnionApiError(
-      '请先设置 VITE_GRAPH_USER_ID 环境变量',
-      401,
-      'AUTH_MISSING',
-    )
-  }
-  return {
-    'X-User-Id': userId,
-    'Content-Type': 'application/json',
+  try {
+    return getAuthHeadersWithContentType()
+  } catch (err) {
+    if (err instanceof AuthRequiredError) {
+      throw new UnionApiError('请先登录', 401, 'AUTH_MISSING')
+    }
+    throw err
   }
 }
 

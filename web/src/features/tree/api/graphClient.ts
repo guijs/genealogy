@@ -5,7 +5,7 @@
  * - 切换：VITE_USE_GRAPH_API=true 或设置了 VITE_GRAPH_API_BASE
  * - 真路径必须带 familyId（B1）：GET /api/v1/families/{familyId}/graph
  *   不接受无 family 的 person-only 路由
- * - 真 API 需认证：X-User-Id header = family member UUID（由 VITE_GRAPH_USER_ID 设置）
+ * - 真 API 需认证：Authorization: Bearer <token>
  *
  * P0 约束：
  * - 无 asOf（历史时点视图 → P1）
@@ -23,6 +23,7 @@ import type {
   GraphProjection,
   RelationshipType,
 } from './types'
+import { getAuthHeaders, getAuthHeadersWithContentType } from './auth'
 
 export interface FetchFamilyGraphParams {
   familyId: string
@@ -47,24 +48,7 @@ export function isUsingGraphApi(): boolean {
 
 function graphApiBase(): string {
   const base = (import.meta.env.VITE_GRAPH_API_BASE as string | undefined)?.trim()
-  // 空 base = 同源相对路径
   return base ? base.replace(/\/$/, '') : ''
-}
-
-/**
- * 构建真 API 所需认证头。
- * RequireAuth middleware 期望 X-User-Id = family member UUID。
- * @throws Error 若 VITE_GRAPH_USER_ID 未设置或为空
- */
-function authHeaders(): HeadersInit {
-  const userId = (import.meta.env.VITE_GRAPH_USER_ID as string | undefined)?.trim()
-  if (!userId) {
-    throw new Error(
-      'VITE_GRAPH_USER_ID is required when using real /graph API. ' +
-        'Set it to a valid family member UUID in .env or .env.local.',
-    )
-  }
-  return { 'X-User-Id': userId }
 }
 
 /**
@@ -99,7 +83,7 @@ export async function fetchFamilyGraph(
   })
   const url = `${base}/api/v1/families/${encodeURIComponent(familyId)}/graph?${qs}`
 
-  const res = await fetch(url, { headers: authHeaders() })
+  const res = await fetch(url, { headers: getAuthHeaders() })
   if (!res.ok) {
     throw new Error(
       `GET family graph failed: ${res.status} ${res.statusText} (${url})`,
@@ -161,10 +145,7 @@ export async function addRelationship(
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      ...authHeaders(),
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeadersWithContentType(),
     body: JSON.stringify(body),
   })
 

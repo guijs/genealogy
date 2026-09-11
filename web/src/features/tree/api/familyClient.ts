@@ -6,11 +6,12 @@
  * 硬约束：
  * - Body: { name: string }
  * - 仅在真 API 模式下可用（VITE_USE_GRAPH_API / VITE_GRAPH_API_BASE）
- * - 认证：X-User-Id header = VITE_GRAPH_USER_ID
+ * - 认证：Authorization: Bearer <token>
  * - 成功后返回 FamilyResponse { id, name }
  * - Mock 模式下不可伪造成功（与 personClient / graphClient 保持一致）
  */
 import { isUsingGraphApi } from './graphClient'
+import { getAuthHeadersWithContentType, AuthRequiredError } from './auth'
 
 export interface CreateFamilyRequest {
   name: string
@@ -54,17 +55,13 @@ function apiBase(): string {
 }
 
 function authHeaders(): HeadersInit {
-  const userId = (import.meta.env.VITE_GRAPH_USER_ID as string | undefined)?.trim()
-  if (!userId) {
-    throw new FamilyApiError(
-      '请先设置 VITE_GRAPH_USER_ID 环境变量',
-      401,
-      'AUTH_MISSING',
-    )
-  }
-  return {
-    'X-User-Id': userId,
-    'Content-Type': 'application/json',
+  try {
+    return getAuthHeadersWithContentType()
+  } catch (err) {
+    if (err instanceof AuthRequiredError) {
+      throw new FamilyApiError('请先登录', 401, 'AUTH_MISSING')
+    }
+    throw err
   }
 }
 

@@ -8,11 +8,12 @@
  * 硬约束：
  * - Body snake_case：{ first_name, last_name }
  * - 仅在真 API 模式下可用（VITE_USE_GRAPH_API / VITE_GRAPH_API_BASE）
- * - 认证：X-User-Id header = VITE_GRAPH_USER_ID
+ * - 认证：Authorization: Bearer <token>
  * - 成功后调方调 reloadGraph() 刷新树
  * - 不含 displayName 写入（服务端不接受）
  */
 import { isUsingGraphApi } from './graphClient'
+import { getAuthHeadersWithContentType, AuthRequiredError } from './auth'
 
 export interface CreatePersonRequest {
   first_name: string
@@ -60,17 +61,13 @@ function apiBase(): string {
 }
 
 function authHeaders(): HeadersInit {
-  const userId = (import.meta.env.VITE_GRAPH_USER_ID as string | undefined)?.trim()
-  if (!userId) {
-    throw new PersonApiError(
-      '请先设置 VITE_GRAPH_USER_ID 环境变量',
-      401,
-      'AUTH_MISSING',
-    )
-  }
-  return {
-    'X-User-Id': userId,
-    'Content-Type': 'application/json',
+  try {
+    return getAuthHeadersWithContentType()
+  } catch (err) {
+    if (err instanceof AuthRequiredError) {
+      throw new PersonApiError('请先登录', 401, 'AUTH_MISSING')
+    }
+    throw err
   }
 }
 
