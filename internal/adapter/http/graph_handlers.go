@@ -44,6 +44,10 @@ func (h *GraphHandlers) GetGraph(w http.ResponseWriter, r *http.Request) {
 			depth = parsedDepth
 		}
 	}
+	if depth > app.MaxDepth {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "depth exceeds maximum allowed value of 8"})
+		return
+	}
 
 	graph, err := h.service.GetGraph(app.GetGraphRequest{
 		FamilyID:     familyID,
