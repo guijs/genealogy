@@ -66,6 +66,10 @@ public class ProjectionStore {
         persons.put(person.getId(), person);
     }
 
+    public void upsertPerson(ProjectionPerson person) {
+        persons.put(person.getId(), person);
+    }
+
     public void createMarriage(ProjectionMarriage marriage) {
         marriages.put(marriage.getId(), marriage);
     }

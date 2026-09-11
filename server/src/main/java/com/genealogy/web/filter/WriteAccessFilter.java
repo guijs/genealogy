@@ -24,6 +24,12 @@ public class WriteAccessFilter extends OncePerRequestFilter {
     private static final Pattern RELATIONSHIPS_PATH_PATTERN = 
             Pattern.compile("^/api/v1/families/[^/]+/relationships$");
 
+    private static final Pattern PERSONS_POST_PATH_PATTERN = 
+            Pattern.compile("^/api/v1/families/[^/]+/persons$");
+
+    private static final Pattern PERSONS_PATCH_PATH_PATTERN = 
+            Pattern.compile("^/api/v1/families/[^/]+/persons/[^/]+$");
+
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -57,7 +63,16 @@ public class WriteAccessFilter extends OncePerRequestFilter {
         if (!WRITE_METHODS.contains(method)) {
             return false;
         }
-        return RELATIONSHIPS_PATH_PATTERN.matcher(path).matches();
+        if (RELATIONSHIPS_PATH_PATTERN.matcher(path).matches()) {
+            return true;
+        }
+        if ("POST".equals(method) && PERSONS_POST_PATH_PATTERN.matcher(path).matches()) {
+            return true;
+        }
+        if ("PATCH".equals(method) && PERSONS_PATCH_PATH_PATTERN.matcher(path).matches()) {
+            return true;
+        }
+        return false;
     }
 
     private void writeError(HttpServletResponse response, int status, String message) throws IOException {
