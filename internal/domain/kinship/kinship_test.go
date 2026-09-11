@@ -131,7 +131,7 @@ func TestGraph_DualBiologicalMother_Rejected(t *testing.T) {
 	}
 }
 
-func TestGraph_AdoptiveParents_MultipleAllowed(t *testing.T) {
+func TestGraph_DualAdoptiveFather_Rejected(t *testing.T) {
 	g := NewGraph()
 	child := newPersonID()
 	adoptiveFather1 := newPersonID()
@@ -151,8 +151,93 @@ func TestGraph_AdoptiveParents_MultipleAllowed(t *testing.T) {
 		To:   child,
 		Type: RelationAdoptiveFather,
 	})
+	if err != ErrDualAdoptiveFather {
+		t.Errorf("expected ErrDualAdoptiveFather, got %v", err)
+	}
+}
+
+func TestGraph_DualAdoptiveMother_Rejected(t *testing.T) {
+	g := NewGraph()
+	child := newPersonID()
+	adoptiveMother1 := newPersonID()
+	adoptiveMother2 := newPersonID()
+
+	err := g.AddRelation(Relation{
+		From: adoptiveMother1,
+		To:   child,
+		Type: RelationAdoptiveMother,
+	})
 	if err != nil {
-		t.Errorf("second adoptive father should be allowed, got %v", err)
+		t.Fatalf("first adoptive mother should succeed: %v", err)
+	}
+
+	err = g.AddRelation(Relation{
+		From: adoptiveMother2,
+		To:   child,
+		Type: RelationAdoptiveMother,
+	})
+	if err != ErrDualAdoptiveMother {
+		t.Errorf("expected ErrDualAdoptiveMother, got %v", err)
+	}
+}
+
+func TestGraph_BiologicalAndAdoptiveFather_Coexist(t *testing.T) {
+	g := NewGraph()
+	child := newPersonID()
+	bioFather := newPersonID()
+	adoptiveFather := newPersonID()
+
+	err := g.AddRelation(Relation{
+		From: bioFather,
+		To:   child,
+		Type: RelationBiologicalFather,
+	})
+	if err != nil {
+		t.Fatalf("biological father should succeed: %v", err)
+	}
+
+	err = g.AddRelation(Relation{
+		From: adoptiveFather,
+		To:   child,
+		Type: RelationAdoptiveFather,
+	})
+	if err != nil {
+		t.Errorf("adoptive father should coexist with biological father, got %v", err)
+	}
+
+	parents := g.GetParents(child)
+	if len(parents) != 2 {
+		t.Errorf("child should have 2 parents (bio + adoptive), got %d", len(parents))
+	}
+}
+
+func TestGraph_BiologicalAndAdoptiveMother_Coexist(t *testing.T) {
+	g := NewGraph()
+	child := newPersonID()
+	bioMother := newPersonID()
+	adoptiveMother := newPersonID()
+
+	err := g.AddRelation(Relation{
+		From: bioMother,
+		To:   child,
+		Type: RelationBiologicalMother,
+	})
+	if err != nil {
+		t.Fatalf("biological mother should succeed: %v", err)
+	}
+
+	err = g.AddRelation(Relation{
+		From: adoptiveMother,
+		To:   child,
+		Type: RelationAdoptiveMother,
+	})
+	if err != nil {
+		t.Errorf("adoptive mother should coexist with biological mother, got %v", err)
+	}
+
+	parents := g.GetParents(child)
+	if len(parents) != 2 {
+		t.Errorf("child should have 2 parents (bio + adoptive), got %d", len(parents))
 	}
 }
 

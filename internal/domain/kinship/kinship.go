@@ -17,6 +17,15 @@ func (r RelationType) IsBiologicalParent() bool {
 	return r == RelationBiologicalFather || r == RelationBiologicalMother
 }
 
+func (r RelationType) IsParentRole() bool {
+	switch r {
+	case RelationBiologicalFather, RelationBiologicalMother,
+		RelationAdoptiveFather, RelationAdoptiveMother:
+		return true
+	}
+	return false
+}
+
 type Relation struct {
 	From PersonID
 	To   PersonID
@@ -40,7 +49,7 @@ func (g *Graph) AddRelation(rel Relation) error {
 		return ErrSelfLoop
 	}
 
-	if err := g.validateBiologicalParentUniqueness(rel); err != nil {
+	if err := g.validateParentUniqueness(rel); err != nil {
 		return err
 	}
 
@@ -53,17 +62,23 @@ func (g *Graph) AddRelation(rel Relation) error {
 	return nil
 }
 
-func (g *Graph) validateBiologicalParentUniqueness(newRel Relation) error {
-	if !newRel.Type.IsBiologicalParent() {
+func (g *Graph) validateParentUniqueness(newRel Relation) error {
+	if !newRel.Type.IsParentRole() {
 		return nil
 	}
 
 	for _, existing := range g.children[newRel.To] {
 		if existing.Type == newRel.Type && existing.From != newRel.From {
-			if newRel.Type == RelationBiologicalFather {
+			switch newRel.Type {
+			case RelationBiologicalFather:
 				return ErrDualBiologicalFather
+			case RelationBiologicalMother:
+				return ErrDualBiologicalMother
+			case RelationAdoptiveFather:
+				return ErrDualAdoptiveFather
+			case RelationAdoptiveMother:
+				return ErrDualAdoptiveMother
 			}
-			return ErrDualBiologicalMother
 		}
 	}
 	return nil
