@@ -1,20 +1,24 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
-  chenDivorceRemarriageFixture,
-  fetchGraphFixture,
-} from '../api/fixture'
+  DEMO_GRAPH_PARAMS,
+  fetchFamilyGraph,
+  isUsingGraphApi,
+} from '../api/graphClient'
 import type { GraphProjection, PersonDTO } from '../api/types'
 import { deriveKinForPerson, layoutUnionGraph } from '../layout/unionLayout'
 
 export const useTreeViewStore = defineStore('treeView', () => {
   const graph = ref<GraphProjection | null>(null)
-  const focusPersonId = ref<string>(chenDivorceRemarriageFixture.rootPersonId)
+  // 演示 root 保留自 fixture / DEMO_GRAPH_PARAMS
+  const focusPersonId = ref<string>(DEMO_GRAPH_PARAMS.rootPersonId)
   const selectedPersonId = ref<string | null>(null)
   const drawerOpen = ref(false)
   const loading = ref(false)
   /** 默认画布缩放 100%（长辈字号验收） */
   const zoom = ref(1)
+  /** 当前数据源：fixture mock vs 真 API（供 UI 文案） */
+  const usingGraphApi = ref(isUsingGraphApi())
 
   const layout = computed(() => {
     if (!graph.value) return null
@@ -44,10 +48,19 @@ export const useTreeViewStore = defineStore('treeView', () => {
     () => graph.value?.truncateReason ?? '已达展开上限',
   )
 
+  /**
+   * 加载演示家族图。走 fetchFamilyGraph（默认 fixture；env 可切真 API）。
+   * 保留演示 familyId / rootPersonId。
+   */
   async function loadDemo(familyId?: string) {
     loading.value = true
+    usingGraphApi.value = isUsingGraphApi()
     try {
-      graph.value = await fetchGraphFixture(familyId)
+      graph.value = await fetchFamilyGraph({
+        familyId: familyId ?? DEMO_GRAPH_PARAMS.familyId,
+        rootPersonId: DEMO_GRAPH_PARAMS.rootPersonId,
+        depth: DEMO_GRAPH_PARAMS.depth,
+      })
       focusPersonId.value = graph.value.rootPersonId
       zoom.value = 1
     } finally {
@@ -75,6 +88,7 @@ export const useTreeViewStore = defineStore('treeView', () => {
     drawerOpen,
     loading,
     zoom,
+    usingGraphApi,
     layout,
     selectedPerson,
     selectedKin,

@@ -6,7 +6,8 @@ import PersonDetailDrawer from '../features/tree/panels/PersonDetailDrawer.vue'
 import { useTreeViewStore } from '../features/tree/state/treeViewStore'
 
 const store = useTreeViewStore()
-const { loading, truncated, truncateReason, graph } = storeToRefs(store)
+const { loading, truncated, truncateReason, graph, usingGraphApi } =
+  storeToRefs(store)
 
 onMounted(() => {
   void store.loadDemo()
@@ -19,8 +20,14 @@ onMounted(() => {
       <div>
         <h1>家族网络（只读投影）</h1>
         <p class="sub">
-          本地 mock · 对接未来
-          <code>GET /api/v1/families/{'{familyId}'}/graph</code>
+          <template v-if="usingGraphApi">
+            已接真 API ·
+            <code>GET /api/v1/families/{'{familyId}'}/graph</code>
+          </template>
+          <template v-else>
+            当前使用 fixture mock · 对接未来
+            <code>GET /api/v1/families/{'{familyId}'}/graph</code>
+          </template>
         </p>
       </div>
       <div v-if="graph" class="meta">
