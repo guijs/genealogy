@@ -251,4 +251,49 @@ class MediaControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
     }
+
+    // Test 15: Zero file size → 400
+    @Test
+    void uploadUrl_zeroFileSize_returns400() throws Exception {
+        String body = """
+            {"mime_type": "image/jpeg", "file_size": 0}
+            """;
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid file size: must be greater than 0"));
+    }
+
+    // Test 16: Negative file size → 400
+    @Test
+    void uploadUrl_negativeFileSize_returns400() throws Exception {
+        String body = """
+            {"mime_type": "image/jpeg", "file_size": -100}
+            """;
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid file size: must be greater than 0"));
+    }
+
+    // Test 17: Missing file size (null → defaults to 0) → 400
+    @Test
+    void uploadUrl_missingFileSize_returns400() throws Exception {
+        String body = """
+            {"mime_type": "image/jpeg"}
+            """;
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/media/upload-url")
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid file size: must be greater than 0"));
+    }
 }
