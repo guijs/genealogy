@@ -169,4 +169,100 @@ class FamiliesControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("invalid user id"));
     }
+
+    @Test
+    void listFamilies_withoutUserIdHeader_returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/families"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("authentication required"));
+    }
+
+    @Test
+    void listFamilies_userWithNoFamilies_returnsEmptyList() throws Exception {
+        mockMvc.perform(get("/api/v1/families")
+                        .header("X-User-Id", USER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.families").isArray())
+                .andExpect(jsonPath("$.families").isEmpty());
+    }
+
+    @Test
+    void listFamilies_userAdminOfAAndMemberOfB_bothListed_otherFamilyCNotListed() throws Exception {
+        String familyAName = "Family A";
+        String familyBName = "Family B";
+        String familyCName = "Family C";
+
+        mockMvc.perform(post("/api/v1/families")
+                        .header("X-User-Id", USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {"name": "%s"}
+                            """.formatted(familyAName)))
+                .andExpect(status().isCreated());
+
+        MvcResult resultB = mockMvc.perform(post("/api/v1/families")
+                        .header("X-User-Id", OTHER_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {"name": "%s"}
+                            """.formatted(familyBName)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String familyBId = new ObjectMapper().readTree(resultB.getResponse().getContentAsString()).get("id").asText();
+
+        mockMvc.perform(post("/api/v1/families/" + familyBId + "/members")
+                        .header("X-User-Id", OTHER_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {"user_id": "%s", "role": "viewer"}
+                            """.formatted(USER_ID.toString())))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/families")
+                        .header("X-User-Id", OTHER_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {"name": "%s"}
+                            """.formatted(familyCName)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/families")
+                        .header("X-User-Id", USER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.families").isArray())
+                .andExpect(jsonPath("$.families.length()").value(2))
+                .andExpect(jsonPath("$.families[?(@.name == 'Family A')]").exists())
+                .andExpect(jsonPath("$.families[?(@.name == 'Family B')]").exists())
+                .andExpect(jsonPath("$.families[?(@.name == 'Family C')]").doesNotExist());
+    }
+
+    @Test
+    void listFamilies_createFamilyThenList_includesNewFamily() throws Exception {
+        String familyName = "New Test Family";
+
+        mockMvc.perform(get("/api/v1/families")
+                        .header("X-User-Id", USER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.families").isEmpty());
+
+        MvcResult createResult = mockMvc.perform(post("/api/v1/families")
+                        .header("X-User-Id", USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {"name": "%s"}
+                            """.formatted(familyName)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String familyId = new ObjectMapper().readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+
+        mockMvc.perform(get("/api/v1/families")
+                        .header("X-User-Id", USER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.families").isArray())
+                .andExpect(jsonPath("$.families.length()").value(1))
+                .andExpect(jsonPath("$.families[0].id").value(familyId))
+                .andExpect(jsonPath("$.families[0].name").value(familyName));
+    }
 }
