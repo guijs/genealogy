@@ -13,6 +13,8 @@ import com.genealogy.web.dto.CreatePersonRequest;
 import com.genealogy.web.dto.ErrorResponse;
 import com.genealogy.web.dto.FamilyResponse;
 import com.genealogy.web.dto.HidePersonRequest;
+import com.genealogy.web.dto.MemberResponse;
+import com.genealogy.web.dto.MembersListResponse;
 import com.genealogy.web.dto.PersonResponse;
 import com.genealogy.web.dto.PersonsListResponse;
 import com.genealogy.web.dto.UpdatePersonRequest;
@@ -219,5 +221,22 @@ public class FamilyController {
         familyStore.addMemberWithRole(familyId, newUserId, role);
 
         return ResponseEntity.status(201).body(new AddMemberResponse(newUserId.toString(), role.getValue()));
+    }
+
+    @GetMapping("/members")
+    public ResponseEntity<?> listMembers(HttpServletRequest request) {
+        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
+        if (familyId == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        List<Membership> memberships = familyStore.listMembers(familyId);
+        List<MemberResponse> memberResponses = memberships.stream()
+                .map(m -> new MemberResponse(
+                        m.getUserId().toString(),
+                        m.getRole().getValue()))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(new MembersListResponse(memberResponses));
     }
 }

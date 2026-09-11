@@ -284,4 +284,55 @@ class MembersControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.user_id").value(NEW_USER_ID.toString()))
                 .andExpect(jsonPath("$.role").value("viewer"));
     }
+
+    @Test
+    void listMembers_withoutAuth_returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/families/" + familyId + "/members"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("authentication required"));
+    }
+
+    @Test
+    void listMembers_nonMember_returns404() throws Exception {
+        mockMvc.perform(get("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", NON_MEMBER_USER_ID.toString()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("not found"));
+    }
+
+    @Test
+    void listMembers_viewerCanList_returnsMembersIncludingSelf() throws Exception {
+        mockMvc.perform(get("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", VIEWER_USER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.members").isArray())
+                .andExpect(jsonPath("$.members.length()").value(3))
+                .andExpect(jsonPath("$.members[?(@.user_id == '%s')].role".formatted(ADMIN_USER_ID)).value("admin"))
+                .andExpect(jsonPath("$.members[?(@.user_id == '%s')].role".formatted(EDITOR_USER_ID)).value("editor"))
+                .andExpect(jsonPath("$.members[?(@.user_id == '%s')].role".formatted(VIEWER_USER_ID)).value("viewer"));
+    }
+
+    @Test
+    void listMembers_afterAddMember_showsNewRow() throws Exception {
+        mockMvc.perform(get("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.members.length()").value(3));
+
+        String body = """
+            {"user_id": "%s", "role": "viewer"}
+            """.formatted(NEW_USER_ID);
+
+        mockMvc.perform(post("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.members.length()").value(4))
+                .andExpect(jsonPath("$.members[?(@.user_id == '%s')].role".formatted(NEW_USER_ID)).value("viewer"));
+    }
 }

@@ -19,5 +19,7 @@ public interface FamilyMemberMapper {
     
     List<Family> findFamiliesByUserId(@Param("userId") UUID userId);
     
+    List<Membership> findByFamilyId(@Param("familyId") UUID familyId);
+    
     void deleteAll();
 }

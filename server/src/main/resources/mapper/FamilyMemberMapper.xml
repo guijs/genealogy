@@ -28,6 +28,11 @@
         DELETE FROM family_members
     </delete>
 
+    <select id="findByFamilyId" resultMap="membershipResultMap">
+        SELECT user_id, role FROM family_members
+        WHERE family_id = #{familyId}
+    </select>
+
     <resultMap id="familyResultMap" type="com.genealogy.domain.family.Family">
         <constructor>
             <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
