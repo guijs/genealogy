@@ -18,6 +18,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
 
     private static final UUID USER_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final UUID OTHER_USER_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
+    private static final String AUTH_HEADER = "Authorization";
 
     @BeforeEach
     void setUp() {
@@ -44,7 +45,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -58,7 +59,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -72,7 +73,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -87,7 +88,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
             """.formatted(familyName);
 
         mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -102,7 +103,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -117,7 +118,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
             """.formatted(familyName);
 
         MvcResult createResult = mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -127,7 +128,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
         String familyId = new ObjectMapper().readTree(responseBody).get("id").asText();
 
         mockMvc.perform(get("/api/v1/families/" + familyId)
-                        .header("X-User-Id", USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(familyId))
                 .andExpect(jsonPath("$.name").value(familyName));
@@ -141,7 +142,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
             """.formatted(familyName);
 
         MvcResult createResult = mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -151,23 +152,22 @@ class FamiliesControllerTest extends BaseIntegrationTest {
         String familyId = new ObjectMapper().readTree(responseBody).get("id").asText();
 
         mockMvc.perform(get("/api/v1/families/" + familyId)
-                        .header("X-User-Id", OTHER_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(OTHER_USER_ID)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("not found"));
     }
 
     @Test
-    void createFamily_withInvalidUserId_returns401() throws Exception {
+    void createFamily_withInvalidJwt_returns401() throws Exception {
         String body = """
             {"name": "Test Family"}
             """;
 
         mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", "not-a-uuid")
+                        .header(AUTH_HEADER, "Bearer invalid-jwt-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.error").value("invalid user id"));
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -180,7 +180,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
     @Test
     void listFamilies_userWithNoFamilies_returnsEmptyList() throws Exception {
         mockMvc.perform(get("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.families").isArray())
                 .andExpect(jsonPath("$.families").isEmpty());
@@ -193,7 +193,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
         String familyCName = "Family C";
 
         mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                             {"name": "%s"}
@@ -201,7 +201,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isCreated());
 
         MvcResult resultB = mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", OTHER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(OTHER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                             {"name": "%s"}
@@ -212,7 +212,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
         String familyBId = new ObjectMapper().readTree(resultB.getResponse().getContentAsString()).get("id").asText();
 
         mockMvc.perform(post("/api/v1/families/" + familyBId + "/members")
-                        .header("X-User-Id", OTHER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(OTHER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                             {"user_id": "%s", "role": "viewer"}
@@ -220,7 +220,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", OTHER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(OTHER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                             {"name": "%s"}
@@ -228,7 +228,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.families").isArray())
                 .andExpect(jsonPath("$.families.length()").value(2))
@@ -242,12 +242,12 @@ class FamiliesControllerTest extends BaseIntegrationTest {
         String familyName = "New Test Family";
 
         mockMvc.perform(get("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.families").isEmpty());
 
         MvcResult createResult = mockMvc.perform(post("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                             {"name": "%s"}
@@ -258,7 +258,7 @@ class FamiliesControllerTest extends BaseIntegrationTest {
         String familyId = new ObjectMapper().readTree(createResult.getResponse().getContentAsString()).get("id").asText();
 
         mockMvc.perform(get("/api/v1/families")
-                        .header("X-User-Id", USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.families").isArray())
                 .andExpect(jsonPath("$.families.length()").value(1))

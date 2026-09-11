@@ -21,6 +21,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class UnionGraphIntegrationTest extends BaseIntegrationTest {
 
+    private static final String AUTH_HEADER = "Authorization";
+
     @Autowired
     private FamilyStore familyStore;
 
@@ -61,14 +63,14 @@ class UnionGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("active"));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PERSON1_ID.toString())
                         .param("depth", "3"))
                 .andExpect(status().isOk())
@@ -91,7 +93,7 @@ class UnionGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         var createResult = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createBody))
                 .andExpect(status().isCreated())
@@ -106,14 +108,14 @@ class UnionGraphIntegrationTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions/" + unionId + "/end")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(endBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("divorced"));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PERSON1_ID.toString())
                         .param("depth", "3"))
                 .andExpect(status().isOk())
@@ -130,7 +132,7 @@ class UnionGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         var firstResult = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(firstUnion))
                 .andExpect(status().isCreated())
@@ -145,7 +147,7 @@ class UnionGraphIntegrationTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions/" + firstUnionId + "/end")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(endBody))
                 .andExpect(status().isOk());
@@ -155,13 +157,13 @@ class UnionGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON3_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(secondUnion))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PERSON1_ID.toString())
                         .param("depth", "3"))
                 .andExpect(status().isOk())
@@ -178,13 +180,13 @@ class UnionGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .param("rootPersonId", PERSON1_ID.toString())
                         .param("depth", "3"))
                 .andExpect(status().isOk())
@@ -199,7 +201,7 @@ class UnionGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         var createResult = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createBody))
                 .andExpect(status().isCreated())
@@ -214,13 +216,13 @@ class UnionGraphIntegrationTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions/" + unionId + "/end")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(endBody))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PERSON1_ID.toString())
                         .param("depth", "3"))
                 .andExpect(status().isOk())
@@ -236,13 +238,13 @@ class UnionGraphIntegrationTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .param("rootPersonId", PERSON2_ID.toString())
                         .param("depth", "3"))
                 .andExpect(status().isOk())

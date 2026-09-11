@@ -18,7 +18,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE + 2)
+@Order(2)
 public class WriteAccessFilter extends OncePerRequestFilter {
 
     private static final Pattern RELATIONSHIPS_PATH_PATTERN = 

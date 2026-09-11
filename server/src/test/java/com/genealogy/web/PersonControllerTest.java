@@ -22,6 +22,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class PersonControllerTest extends BaseIntegrationTest {
 
+    private static final String AUTH_HEADER = "Authorization";
+
     @Autowired
     private FamilyStore familyStore;
 
@@ -71,7 +73,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", NON_MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(NON_MEMBER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -86,7 +88,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isForbidden())
@@ -101,7 +103,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -110,7 +112,7 @@ class PersonControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.last_name").value("Doe"));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons.length()").value(2));
     }
@@ -123,7 +125,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         String response = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -160,7 +162,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(patch("/api/v1/families/" + FAMILY_ID + "/persons/" + EXISTING_PERSON_ID)
-                        .header("X-User-Id", NON_MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(NON_MEMBER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -175,7 +177,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(patch("/api/v1/families/" + FAMILY_ID + "/persons/" + EXISTING_PERSON_ID)
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isForbidden())
@@ -190,7 +192,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(patch("/api/v1/families/" + FAMILY_ID + "/persons/" + EXISTING_PERSON_ID)
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -199,7 +201,7 @@ class PersonControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.last_name").value("Name"));
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.persons[?(@.id=='" + EXISTING_PERSON_ID + "')].first_name").value(hasItem("Updated")))
                 .andExpect(jsonPath("$.persons[?(@.id=='" + EXISTING_PERSON_ID + "')].last_name").value(hasItem("Name")));
@@ -217,7 +219,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(patch("/api/v1/families/" + FAMILY_ID + "/persons/" + EXISTING_PERSON_ID)
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -234,7 +236,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(patch("/api/v1/families/" + FAMILY_ID + "/persons/" + unknownPersonId)
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -254,7 +256,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(patch("/api/v1/families/" + FAMILY_ID + "/persons/" + otherPersonId)
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -269,7 +271,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -284,7 +286,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -299,7 +301,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -314,7 +316,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(patch("/api/v1/families/" + FAMILY_ID + "/persons/" + EXISTING_PERSON_ID)
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -329,7 +331,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -345,7 +347,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -364,7 +366,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", editorUserId.toString())
+                        .header(AUTH_HEADER, bearerToken(editorUserId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -380,7 +382,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/not-a-uuid/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -395,7 +397,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(patch("/api/v1/families/" + FAMILY_ID + "/persons/not-a-uuid")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -410,7 +412,7 @@ class PersonControllerTest extends BaseIntegrationTest {
             """;
 
         String response = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())

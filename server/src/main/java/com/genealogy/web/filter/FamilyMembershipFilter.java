@@ -21,7 +21,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE + 1)
+@Order(1)
 public class FamilyMembershipFilter extends OncePerRequestFilter {
 
     public static final String FAMILY_ID_ATTRIBUTE = "familyId";

@@ -19,6 +19,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class UnionControllerTest extends BaseIntegrationTest {
 
+    private static final String AUTH_HEADER = "Authorization";
+
     @Autowired
     private FamilyStore familyStore;
 
@@ -76,7 +78,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", NON_MEMBER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(NON_MEMBER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -91,7 +93,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isForbidden())
@@ -106,7 +108,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -127,7 +129,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON1_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isUnprocessableEntity())
@@ -142,7 +144,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON_NOT_IN_FAMILY_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -157,7 +159,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(firstUnion))
                 .andExpect(status().isCreated());
@@ -167,7 +169,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON3_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(secondUnion))
                 .andExpect(status().isUnprocessableEntity())
@@ -187,7 +189,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions/" + unionId + "/end")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -207,7 +209,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions/" + nonExistentUnionId + "/end")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isNotFound())
@@ -227,7 +229,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions/" + unionId + "/end")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isUnprocessableEntity())
@@ -266,7 +268,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions/" + unionId + "/end")
-                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isForbidden())
@@ -281,7 +283,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON2_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -301,7 +303,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions/" + unionId + "/end")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -320,7 +322,7 @@ class UnionControllerTest extends BaseIntegrationTest {
         String body = "{}";
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions/" + unionId + "/end")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
@@ -336,7 +338,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
@@ -352,7 +354,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON2_ID);
 
         var createResult = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(firstUnion))
                 .andExpect(status().isCreated())
@@ -367,7 +369,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions/" + unionId + "/end")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(endBody))
                 .andExpect(status().isOk());
@@ -377,7 +379,7 @@ class UnionControllerTest extends BaseIntegrationTest {
             """.formatted(PERSON1_ID, PERSON3_ID);
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/unions")
-                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(secondUnion))
                 .andExpect(status().isCreated())
