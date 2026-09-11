@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { isUsingGraphApi } from '../features/tree/api/graphClient'
+import { getCurrentUserId } from '../features/tree/api/auth'
 import {
   listMembers,
   addMember,
@@ -30,7 +31,7 @@ const usingGraphApi = computed(() => isUsingGraphApi())
 const familyId = computed(() => route.query.familyId as string | undefined)
 
 const currentUserId = computed(() => {
-  return (import.meta.env.VITE_GRAPH_USER_ID as string | undefined)?.trim() ?? ''
+  return getCurrentUserId() ?? ''
 })
 
 const isAdmin = computed(() => {
