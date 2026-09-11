@@ -2,8 +2,10 @@ package com.genealogy.web;
 
 import com.genealogy.domain.family.Role;
 import com.genealogy.domain.person.Person;
+import com.genealogy.service.PersonService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
+import com.genealogy.store.ProjectionStore;
 import com.genealogy.web.filter.AuthFilter;
 import com.genealogy.web.filter.FamilyMembershipFilter;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +22,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(FamilyController.class)
-@Import({FamilyStore.class, PersonStore.class, AuthFilter.class, FamilyMembershipFilter.class})
+@Import({FamilyStore.class, PersonStore.class, ProjectionStore.class, PersonService.class,
+        AuthFilter.class, FamilyMembershipFilter.class})
 class FamilyControllerTest {
 
     @Autowired

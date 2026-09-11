@@ -2,18 +2,14 @@ package com.genealogy.web;
 
 import com.genealogy.domain.family.Family;
 import com.genealogy.domain.person.Person;
+import com.genealogy.service.PersonService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
-import com.genealogy.web.dto.ErrorResponse;
-import com.genealogy.web.dto.FamilyResponse;
-import com.genealogy.web.dto.PersonResponse;
-import com.genealogy.web.dto.PersonsListResponse;
+import com.genealogy.web.dto.*;
 import com.genealogy.web.filter.FamilyMembershipFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,10 +22,12 @@ public class FamilyController {
 
     private final FamilyStore familyStore;
     private final PersonStore personStore;
+    private final PersonService personService;
 
-    public FamilyController(FamilyStore familyStore, PersonStore personStore) {
+    public FamilyController(FamilyStore familyStore, PersonStore personStore, PersonService personService) {
         this.familyStore = familyStore;
         this.personStore = personStore;
+        this.personService = personService;
     }
 
     @GetMapping
@@ -64,5 +62,55 @@ public class FamilyController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(new PersonsListResponse(personResponses));
+    }
+
+    @PostMapping("/persons")
+    public ResponseEntity<?> createPerson(HttpServletRequest request,
+                                          @RequestBody CreatePersonRequest body) {
+        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
+        if (familyId == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        try {
+            Person person = personService.createPerson(familyId, body.getFirstName(), body.getLastName());
+            return ResponseEntity.status(201).body(new PersonResponse(
+                    person.getId().toString(),
+                    person.getFirstName(),
+                    person.getLastName()));
+        } catch (PersonService.InvalidNameException e) {
+            return ResponseEntity.status(400).body(new ErrorResponse(e.getMessage()));
+        } catch (PersonService.PersonCapExceededException e) {
+            return ResponseEntity.status(409).body(new ErrorResponse(e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/persons/{personId}")
+    public ResponseEntity<?> updatePerson(HttpServletRequest request,
+                                          @PathVariable String personId,
+                                          @RequestBody UpdatePersonRequest body) {
+        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
+        if (familyId == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        UUID personUUID;
+        try {
+            personUUID = UUID.fromString(personId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        try {
+            Person person = personService.updatePerson(familyId, personUUID, body.getFirstName(), body.getLastName());
+            return ResponseEntity.ok(new PersonResponse(
+                    person.getId().toString(),
+                    person.getFirstName(),
+                    person.getLastName()));
+        } catch (PersonService.PersonNotFoundException e) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        } catch (PersonService.InvalidNameException e) {
+            return ResponseEntity.status(400).body(new ErrorResponse(e.getMessage()));
+        }
     }
 }

@@ -33,6 +33,16 @@ public class PersonStore {
         return person != null && person.getFamilyId().equals(familyId);
     }
 
+    public void replace(Person person) {
+        persons.put(person.getId(), person);
+    }
+
+    public long countByFamily(UUID familyId) {
+        return persons.values().stream()
+                .filter(p -> p.getFamilyId().equals(familyId))
+                .count();
+    }
+
     public void clear() {
         persons.clear();
     }
