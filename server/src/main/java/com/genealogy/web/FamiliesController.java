@@ -1,19 +1,23 @@
 package com.genealogy.web;
 
+import com.genealogy.domain.family.Family;
 import com.genealogy.domain.family.Role;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.web.dto.CreateFamilyRequest;
 import com.genealogy.web.dto.ErrorResponse;
+import com.genealogy.web.dto.FamiliesListResponse;
 import com.genealogy.web.dto.FamilyResponse;
 import com.genealogy.web.filter.AuthFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -24,6 +28,21 @@ public class FamiliesController {
 
     public FamiliesController(FamilyStore familyStore) {
         this.familyStore = familyStore;
+    }
+
+    @GetMapping
+    public ResponseEntity<?> listFamilies(HttpServletRequest request) {
+        UUID userId = (UUID) request.getAttribute(AuthFilter.USER_ID_ATTRIBUTE);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(new ErrorResponse("authentication required"));
+        }
+
+        List<Family> families = familyStore.getFamiliesForUser(userId);
+        List<FamilyResponse> familyResponses = families.stream()
+                .map(f -> new FamilyResponse(f.getId().toString(), f.getName()))
+                .toList();
+
+        return ResponseEntity.ok(new FamiliesListResponse(familyResponses));
     }
 
     @PostMapping

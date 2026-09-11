@@ -7,6 +7,7 @@ import com.genealogy.mapper.FamilyMapper;
 import com.genealogy.mapper.FamilyMemberMapper;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -46,6 +47,10 @@ public class FamilyStore {
 
     public Optional<Membership> getMembership(UUID familyId, UUID userId) {
         return Optional.ofNullable(familyMemberMapper.findByFamilyAndUser(familyId, userId));
+    }
+
+    public List<Family> getFamiliesForUser(UUID userId) {
+        return familyMemberMapper.findFamiliesByUserId(userId);
     }
 
     public void clear() {

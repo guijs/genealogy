@@ -1,9 +1,11 @@
 package com.genealogy.mapper;
 
+import com.genealogy.domain.family.Family;
 import com.genealogy.domain.family.Membership;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
 import java.util.UUID;
 
 @Mapper
@@ -14,6 +16,8 @@ public interface FamilyMemberMapper {
     Membership findByFamilyAndUser(@Param("familyId") UUID familyId, @Param("userId") UUID userId);
     
     boolean existsByFamilyAndUser(@Param("familyId") UUID familyId, @Param("userId") UUID userId);
+    
+    List<Family> findFamiliesByUserId(@Param("userId") UUID userId);
     
     void deleteAll();
 }
