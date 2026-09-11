@@ -3,96 +3,152 @@ package com.genealogy.store;
 import com.genealogy.domain.projection.ProjectionMarriage;
 import com.genealogy.domain.projection.ProjectionPerson;
 import com.genealogy.domain.projection.ProjectionRelationship;
+import com.genealogy.mapper.PersonMapper;
+import com.genealogy.mapper.RelationshipMapper;
+import com.genealogy.mapper.UnionMapper;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @Component
 public class ProjectionStore {
-    private final Map<UUID, ProjectionPerson> persons = new ConcurrentHashMap<>();
-    private final Map<UUID, ProjectionMarriage> marriages = new ConcurrentHashMap<>();
-    private final Map<UUID, ProjectionRelationship> relationships = new ConcurrentHashMap<>();
+    private final PersonMapper personMapper;
+    private final UnionMapper unionMapper;
+    private final RelationshipMapper relationshipMapper;
+
+    public ProjectionStore(PersonMapper personMapper, UnionMapper unionMapper, RelationshipMapper relationshipMapper) {
+        this.personMapper = personMapper;
+        this.unionMapper = unionMapper;
+        this.relationshipMapper = relationshipMapper;
+    }
 
     public Optional<ProjectionPerson> getPerson(UUID id) {
-        ProjectionPerson p = persons.get(id);
+        ProjectionPerson p = personMapper.findProjectionById(id);
         return p != null ? Optional.of(p.copy()) : Optional.empty();
     }
 
     public List<ProjectionPerson> getPersonsByFamily(UUID familyId) {
-        return persons.values().stream()
-                .filter(p -> p.getFamilyId().equals(familyId))
-                .map(ProjectionPerson::copy)
-                .collect(Collectors.toList());
+        return personMapper.findProjectionsByFamilyId(familyId);
     }
 
     public List<ProjectionMarriage> getMarriagesByFamily(UUID familyId) {
-        return marriages.values().stream()
-                .filter(m -> m.getFamilyId().equals(familyId))
-                .map(ProjectionMarriage::copy)
-                .collect(Collectors.toList());
+        return unionMapper.findProjectionsByFamilyId(familyId);
     }
 
     public List<ProjectionRelationship> getRelationshipsByFamily(UUID familyId) {
-        return relationships.values().stream()
-                .filter(r -> r.getFamilyId().equals(familyId))
-                .map(ProjectionRelationship::copy)
-                .collect(Collectors.toList());
+        return relationshipMapper.findByFamilyId(familyId);
     }
 
     public List<ProjectionRelationship> getParentsOf(UUID personId) {
-        return relationships.values().stream()
-                .filter(r -> r.getChildId().equals(personId))
-                .map(ProjectionRelationship::copy)
-                .collect(Collectors.toList());
+        return relationshipMapper.findByChildId(personId);
     }
 
     public List<ProjectionRelationship> getChildrenOf(UUID personId) {
-        return relationships.values().stream()
-                .filter(r -> r.getParentId().equals(personId))
-                .map(ProjectionRelationship::copy)
-                .collect(Collectors.toList());
+        return relationshipMapper.findByParentId(personId);
     }
 
     public List<ProjectionMarriage> getMarriagesOf(UUID personId) {
-        return marriages.values().stream()
-                .filter(m -> m.getPartner1Id().equals(personId) || m.getPartner2Id().equals(personId))
-                .map(ProjectionMarriage::copy)
-                .collect(Collectors.toList());
+        return unionMapper.findProjectionsByPartnerId(personId);
     }
 
     public void createPerson(ProjectionPerson person) {
-        persons.put(person.getId(), person);
+        ProjectionPerson existing = personMapper.findProjectionById(person.getId());
+        if (existing != null) {
+            personMapper.update(
+                    person.getId(),
+                    null,
+                    null,
+                    person.getDisplayName(),
+                    person.getGender() != null ? person.getGender().getValue() : null,
+                    person.getBirthYear(),
+                    person.getDeathYear(),
+                    person.isHidden()
+            );
+        } else {
+            personMapper.insert(
+                    person.getId(),
+                    person.getFamilyId(),
+                    null,
+                    null,
+                    person.getDisplayName(),
+                    person.getGender() != null ? person.getGender().getValue() : null,
+                    person.getBirthYear(),
+                    person.getDeathYear(),
+                    person.isHidden()
+            );
+        }
     }
 
     public void upsertPerson(ProjectionPerson person) {
-        persons.put(person.getId(), person);
+        ProjectionPerson existing = personMapper.findProjectionById(person.getId());
+        if (existing != null) {
+            personMapper.update(
+                    person.getId(),
+                    null,
+                    null,
+                    person.getDisplayName(),
+                    person.getGender() != null ? person.getGender().getValue() : null,
+                    person.getBirthYear(),
+                    person.getDeathYear(),
+                    person.isHidden()
+            );
+        } else {
+            createPerson(person);
+        }
     }
 
     public void createMarriage(ProjectionMarriage marriage) {
-        marriages.put(marriage.getId(), marriage);
+        ProjectionMarriage existing = unionMapper.findProjectionById(marriage.getId());
+        if (existing != null) {
+            return;
+        }
+        unionMapper.insert(
+                marriage.getId(),
+                marriage.getFamilyId(),
+                marriage.getPartner1Id(),
+                marriage.getPartner2Id(),
+                marriage.getStatus() != null ? marriage.getStatus().getValue() : "active",
+                marriage.getStartedAt(),
+                marriage.getEndedAt(),
+                marriage.getEndedReason()
+        );
     }
 
     public void createRelationship(ProjectionRelationship relationship) {
-        relationships.put(relationship.getId(), relationship);
+        ProjectionRelationship existing = relationshipMapper.findById(relationship.getId());
+        if (existing != null) {
+            return;
+        }
+        relationshipMapper.insert(
+                relationship.getId(),
+                relationship.getFamilyId(),
+                relationship.getParentId(),
+                relationship.getChildId(),
+                relationship.getSubtype() != null ? relationship.getSubtype().getValue() : "biological",
+                relationship.getRole() != null ? relationship.getRole().getValue() : "parent",
+                relationship.getMarriageId(),
+                relationship.isDissolved()
+        );
     }
 
     public void updateMarriage(ProjectionMarriage marriage) {
-        marriages.put(marriage.getId(), marriage);
+        unionMapper.update(
+                marriage.getId(),
+                marriage.getStatus() != null ? marriage.getStatus().getValue() : "active",
+                marriage.getEndedAt(),
+                marriage.getEndedReason()
+        );
     }
 
     public Optional<ProjectionMarriage> getMarriage(UUID id) {
-        ProjectionMarriage m = marriages.get(id);
+        ProjectionMarriage m = unionMapper.findProjectionById(id);
         return m != null ? Optional.of(m.copy()) : Optional.empty();
     }
 
     public void clear() {
-        persons.clear();
-        marriages.clear();
-        relationships.clear();
+        relationshipMapper.deleteAll();
+        unionMapper.deleteAll();
     }
 }

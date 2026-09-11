@@ -2,21 +2,15 @@ package com.genealogy.web;
 
 import com.genealogy.domain.family.Role;
 import com.genealogy.domain.person.Person;
-import com.genealogy.service.RelationshipService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.KinshipStore;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
-import com.genealogy.web.filter.AuthFilter;
-import com.genealogy.web.filter.FamilyMembershipFilter;
-import com.genealogy.web.filter.WriteAccessFilter;
+import com.genealogy.support.BaseIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
@@ -24,13 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(RelationshipController.class)
-@Import({FamilyStore.class, PersonStore.class, KinshipStore.class, ProjectionStore.class, RelationshipService.class,
-        AuthFilter.class, FamilyMembershipFilter.class, WriteAccessFilter.class})
-class RelationshipControllerTest {
-
-    @Autowired
-    private MockMvc mockMvc;
+class RelationshipControllerTest extends BaseIntegrationTest {
 
     @Autowired
     private FamilyStore familyStore;
@@ -57,10 +45,8 @@ class RelationshipControllerTest {
 
     @BeforeEach
     void setUp() {
-        familyStore.clear();
-        personStore.clear();
+        cleanAllData();
         kinshipStore.clear();
-        projectionStore.clear();
 
         familyStore.createFamily(FAMILY_ID, FAMILY_NAME);
         familyStore.addMemberWithRole(FAMILY_ID, ADMIN_USER_ID, Role.ADMIN);

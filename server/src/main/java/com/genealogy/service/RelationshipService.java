@@ -12,6 +12,7 @@ import com.genealogy.store.KinshipStore;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
@@ -27,6 +28,7 @@ public class RelationshipService {
         this.projectionStore = projectionStore;
     }
 
+    @Transactional
     public void addParentChild(UUID familyId, UUID parentId, UUID childId, RelationType relationType) {
         if (!personStore.existsInFamily(parentId, familyId)) {
             throw new PersonNotInFamilyException();
@@ -38,7 +40,12 @@ public class RelationshipService {
         Relation rel = new Relation(parentId, childId, relationType);
         kinshipStore.addRelation(familyId, rel);
 
-        syncToProjectionStore(familyId, parentId, childId, relationType);
+        try {
+            syncToProjectionStore(familyId, parentId, childId, relationType);
+        } catch (Exception e) {
+            kinshipStore.invalidateCache(familyId);
+            throw e;
+        }
     }
 
     private void syncToProjectionStore(UUID familyId, UUID parentId, UUID childId, RelationType relationType) {

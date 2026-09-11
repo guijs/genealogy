@@ -12,14 +12,14 @@ public class ProjectionPerson {
     private final boolean hidden;
 
     public ProjectionPerson(UUID id, UUID familyId, String displayName, Gender gender,
-                            Integer birthYear, Integer deathYear, boolean hidden) {
+                            Integer birthYear, Integer deathYear, Boolean hidden) {
         this.id = id;
         this.familyId = familyId;
         this.displayName = displayName;
         this.gender = gender;
         this.birthYear = birthYear;
         this.deathYear = deathYear;
-        this.hidden = hidden;
+        this.hidden = hidden != null && hidden;
     }
 
     public UUID getId() {

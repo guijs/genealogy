@@ -7,23 +7,15 @@ import com.genealogy.domain.projection.MarriageStatus;
 import com.genealogy.domain.projection.ProjectionMarriage;
 import com.genealogy.domain.projection.ProjectionPerson;
 import com.genealogy.domain.union.Union;
-import com.genealogy.service.GraphService;
-import com.genealogy.service.PersonService;
-import com.genealogy.service.UnionService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
 import com.genealogy.store.UnionStore;
-import com.genealogy.web.filter.AuthFilter;
-import com.genealogy.web.filter.FamilyMembershipFilter;
-import com.genealogy.web.filter.WriteAccessFilter;
+import com.genealogy.support.BaseIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
@@ -33,14 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest({FamilyController.class, GraphController.class})
-@Import({FamilyStore.class, PersonStore.class, ProjectionStore.class, UnionStore.class,
-        PersonService.class, GraphService.class, UnionService.class,
-        AuthFilter.class, FamilyMembershipFilter.class, WriteAccessFilter.class})
-class PersonHideRestoreTest {
-
-    @Autowired
-    private MockMvc mockMvc;
+class PersonHideRestoreTest extends BaseIntegrationTest {
 
     @Autowired
     private FamilyStore familyStore;
@@ -64,18 +49,13 @@ class PersonHideRestoreTest {
 
     @BeforeEach
     void setUp() {
-        familyStore.clear();
-        personStore.clear();
-        projectionStore.clear();
-        unionStore.clear();
+        cleanAllData();
 
         familyStore.createFamily(FAMILY_ID, FAMILY_NAME);
         familyStore.addMemberWithRole(FAMILY_ID, ADMIN_USER_ID, Role.ADMIN);
         familyStore.addMemberWithRole(FAMILY_ID, VIEWER_USER_ID, Role.VIEWER);
 
         personStore.addPerson(new Person(PERSON_ID, FAMILY_ID, "Test", "Person"));
-        projectionStore.createPerson(new ProjectionPerson(
-                PERSON_ID, FAMILY_ID, "Test Person", Gender.MALE, 1980, null, false));
 
         personStore.addPerson(new Person(PARTNER_ID, FAMILY_ID, "Partner", "Person"));
         projectionStore.createPerson(new ProjectionPerson(

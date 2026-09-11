@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.genealogy.mapper.RelationshipMapper">
+
+    <resultMap id="projectionRelationshipResultMap" type="com.genealogy.domain.projection.ProjectionRelationship">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="family_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="parent_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="child_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="subtype" javaType="com.genealogy.domain.projection.ParentChildSubtype" typeHandler="com.genealogy.config.MyBatisConfig$ParentChildSubtypeTypeHandler"/>
+            <arg column="role" javaType="com.genealogy.domain.projection.ParentRole" typeHandler="com.genealogy.config.MyBatisConfig$ParentRoleTypeHandler"/>
+            <arg column="marriage_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="dissolved" javaType="boolean"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO relationships (id, family_id, parent_id, child_id, subtype, role, marriage_id, dissolved)
+        VALUES (#{id}, #{familyId}, #{parentId}, #{childId}, #{subtype}, #{role}, #{marriageId}, #{dissolved})
+    </insert>
+
+    <select id="findById" resultMap="projectionRelationshipResultMap">
+        SELECT id, family_id, parent_id, child_id, subtype, role, marriage_id, dissolved
+        FROM relationships WHERE id = #{id}
+    </select>
+
+    <select id="findByFamilyId" resultMap="projectionRelationshipResultMap">
+        SELECT id, family_id, parent_id, child_id, subtype, role, marriage_id, dissolved
+        FROM relationships WHERE family_id = #{familyId}
+    </select>
+
+    <select id="findByParentId" resultMap="projectionRelationshipResultMap">
+        SELECT id, family_id, parent_id, child_id, subtype, role, marriage_id, dissolved
+        FROM relationships WHERE parent_id = #{parentId}
+    </select>
+
+    <select id="findByChildId" resultMap="projectionRelationshipResultMap">
+        SELECT id, family_id, parent_id, child_id, subtype, role, marriage_id, dissolved
+        FROM relationships WHERE child_id = #{childId}
+    </select>
+
+    <delete id="deleteAll">
+        DELETE FROM relationships
+    </delete>
+
+</mapper>

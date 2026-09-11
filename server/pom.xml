@@ -70,7 +70,8 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Test-only: H2 in-memory database for unit tests (no live PG required) -->
+        <!-- Test-only: H2 in-memory database for unit tests (no live PG required).
+             H2 support is bundled in flyway-core for in-memory/file databases. -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>

@@ -4,21 +4,14 @@ import com.genealogy.domain.family.Role;
 import com.genealogy.domain.person.Person;
 import com.genealogy.domain.projection.Gender;
 import com.genealogy.domain.projection.ProjectionPerson;
-import com.genealogy.service.PersonService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
-import com.genealogy.store.UnionStore;
-import com.genealogy.web.filter.AuthFilter;
-import com.genealogy.web.filter.FamilyMembershipFilter;
-import com.genealogy.web.filter.WriteAccessFilter;
+import com.genealogy.support.BaseIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
@@ -27,13 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(FamilyController.class)
-@Import({FamilyStore.class, PersonStore.class, ProjectionStore.class, UnionStore.class, PersonService.class,
-        AuthFilter.class, FamilyMembershipFilter.class, WriteAccessFilter.class})
-class PersonControllerTest {
-
-    @Autowired
-    private MockMvc mockMvc;
+class PersonControllerTest extends BaseIntegrationTest {
 
     @Autowired
     private FamilyStore familyStore;
@@ -53,17 +40,13 @@ class PersonControllerTest {
 
     @BeforeEach
     void setUp() {
-        familyStore.clear();
-        personStore.clear();
-        projectionStore.clear();
+        cleanAllData();
 
         familyStore.createFamily(FAMILY_ID, FAMILY_NAME);
         familyStore.addMemberWithRole(FAMILY_ID, ADMIN_USER_ID, Role.ADMIN);
         familyStore.addMemberWithRole(FAMILY_ID, VIEWER_USER_ID, Role.VIEWER);
 
         personStore.addPerson(new Person(EXISTING_PERSON_ID, FAMILY_ID, "Existing", "Person"));
-        projectionStore.createPerson(new ProjectionPerson(
-                EXISTING_PERSON_ID, FAMILY_ID, "Existing Person", Gender.MALE, 1980, null, false));
     }
 
     // POST /persons - 401 no auth

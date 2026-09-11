@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.genealogy.mapper.PersonMapper">
+
+    <resultMap id="personResultMap" type="com.genealogy.domain.person.Person">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="family_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="first_name" javaType="java.lang.String"/>
+            <arg column="last_name" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="projectionPersonResultMap" type="com.genealogy.domain.projection.ProjectionPerson">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="family_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="display_name" javaType="java.lang.String"/>
+            <arg column="gender" javaType="com.genealogy.domain.projection.Gender" typeHandler="com.genealogy.config.MyBatisConfig$GenderTypeHandler"/>
+            <arg column="birth_year" javaType="java.lang.Integer"/>
+            <arg column="death_year" javaType="java.lang.Integer"/>
+            <arg column="hidden" javaType="boolean"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO persons (id, family_id, first_name, last_name, display_name, gender, birth_year, death_year, hidden)
+        VALUES (#{id}, #{familyId}, #{firstName}, #{lastName}, #{displayName}, #{gender}, #{birthYear}, #{deathYear}, #{hidden})
+    </insert>
+
+    <update id="update">
+        UPDATE persons
+        SET first_name = COALESCE(#{firstName}, first_name),
+            last_name = COALESCE(#{lastName}, last_name),
+            display_name = COALESCE(#{displayName}, display_name),
+            gender = COALESCE(#{gender}, gender),
+            birth_year = COALESCE(#{birthYear}, birth_year),
+            death_year = COALESCE(#{deathYear}, death_year),
+            hidden = #{hidden},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <select id="findById" resultMap="personResultMap">
+        SELECT id, family_id, first_name, last_name FROM persons WHERE id = #{id}
+    </select>
+
+    <select id="findProjectionById" resultMap="projectionPersonResultMap">
+        SELECT id, family_id, display_name, gender, birth_year, death_year, hidden
+        FROM persons WHERE id = #{id}
+    </select>
+
+    <select id="findByFamilyId" resultMap="personResultMap">
+        SELECT id, family_id, first_name, last_name FROM persons WHERE family_id = #{familyId}
+    </select>
+
+    <select id="findProjectionsByFamilyId" resultMap="projectionPersonResultMap">
+        SELECT id, family_id, display_name, gender, birth_year, death_year, hidden
+        FROM persons WHERE family_id = #{familyId}
+    </select>
+
+    <select id="existsByIdAndFamilyId" resultType="boolean">
+        SELECT COUNT(*) > 0 FROM persons WHERE id = #{id} AND family_id = #{familyId}
+    </select>
+
+    <select id="countByFamilyId" resultType="long">
+        SELECT COUNT(*) FROM persons WHERE family_id = #{familyId}
+    </select>
+
+    <delete id="deleteAll">
+        DELETE FROM persons
+    </delete>
+
+</mapper>
