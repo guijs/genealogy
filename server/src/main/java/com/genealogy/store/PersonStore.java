@@ -24,6 +24,11 @@ public class PersonStore {
                 .collect(Collectors.toList());
     }
 
+    public boolean existsInFamily(UUID personId, UUID familyId) {
+        Person person = persons.get(personId);
+        return person != null && person.getFamilyId().equals(familyId);
+    }
+
     public void clear() {
         persons.clear();
     }
