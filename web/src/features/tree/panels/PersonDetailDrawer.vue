@@ -151,7 +151,18 @@ const roleLabel: Record<string, string> = {
     </section>
 
     <section class="section">
-      <h3 class="section-title">配偶</h3>
+      <div class="section-header">
+        <h3 class="section-title">配偶</h3>
+        <button
+          v-if="usingGraphApi && !editMode"
+          type="button"
+          class="btn-action btn-add-spouse"
+          :disabled="submitting"
+          @click="store.openAddSpouseForm()"
+        >
+          添加配偶
+        </button>
+      </div>
       <ul v-if="selectedKin.spouses.length" class="kin-list">
         <li v-for="row in selectedKin.spouses" :key="row.marriageId">
           <span class="kin-label">配偶</span>
@@ -165,6 +176,15 @@ const roleLabel: Record<string, string> = {
           <span class="tag" :class="{ ended: row.status !== 'active' }">
             {{ statusLabel[row.status] ?? row.status }}
           </span>
+          <button
+            v-if="row.status === 'active' && usingGraphApi && !editMode"
+            type="button"
+            class="btn-end-marriage"
+            :disabled="submitting"
+            @click="store.openEndMarriageForm(row.marriageId)"
+          >
+            结束
+          </button>
         </li>
       </ul>
       <p v-else class="empty">暂无</p>
@@ -379,5 +399,47 @@ const roleLabel: Record<string, string> = {
   margin: 0;
   font-size: var(--type-body, 15px);
   color: #888;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.section-header .section-title {
+  margin: 0;
+}
+.btn-action {
+  padding: 4px 10px;
+  border: 1px solid var(--color-accent, #2f5d50);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-accent, #2f5d50);
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-action:hover:not(:disabled) {
+  background: rgba(47, 93, 80, 0.08);
+}
+.btn-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-end-marriage {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--color-ended, #8a8580);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-ended, #8a8580);
+  font-size: 11px;
+  cursor: pointer;
+}
+.btn-end-marriage:hover:not(:disabled) {
+  background: rgba(138, 133, 128, 0.1);
+}
+.btn-end-marriage:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

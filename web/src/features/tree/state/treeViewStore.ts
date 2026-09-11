@@ -14,6 +14,11 @@ import {
   type CreatePersonRequest,
   type UpdatePersonRequest,
 } from '../api/personClient'
+import {
+  createUnion as apiCreateUnion,
+  endUnion as apiEndUnion,
+  UnionApiError,
+} from '../api/unionClient'
 import type { GraphProjection, PersonDTO } from '../api/types'
 import { deriveKinForPerson, layoutUnionGraph } from '../layout/unionLayout'
 
@@ -40,6 +45,12 @@ export const useTreeViewStore = defineStore('treeView', () => {
   const editMode = ref(false)
   /** 添加成员表单显示 */
   const addFormOpen = ref(false)
+  /** 添加配偶表单显示 */
+  const addSpouseFormOpen = ref(false)
+  /** 结束婚姻表单显示 */
+  const endMarriageFormOpen = ref(false)
+  /** 当前要结束的婚姻 ID */
+  const endMarriageId = ref<string | null>(null)
 
   const layout = computed(() => {
     if (!graph.value) return null
@@ -166,6 +177,98 @@ export const useTreeViewStore = defineStore('treeView', () => {
     }
   }
 
+  /**
+   * 创建婚姻关系（Phase2-B）
+   * 成功后自动 reloadGraph
+   * @param partnerBId 配偶的 personId（当前选中人物为 partnerA）
+   * @param startedAt 可选的婚姻开始日期
+   */
+  async function addSpouse(
+    partnerBId: string,
+    startedAt?: string | null,
+  ): Promise<boolean> {
+    if (!usingGraphApi.value) {
+      showError('添加配偶需要连接真实 API（当前为 mock 模式）')
+      return false
+    }
+    if (!selectedPersonId.value) {
+      showError('请先选择一个人物')
+      return false
+    }
+    clearMessages()
+    submitting.value = true
+    try {
+      await apiCreateUnion(
+        currentFamilyId.value,
+        selectedPersonId.value,
+        partnerBId,
+        startedAt,
+      )
+      showSuccess('配偶添加成功')
+      addSpouseFormOpen.value = false
+      await reloadGraph()
+      return true
+    } catch (e) {
+      const msg = e instanceof UnionApiError ? e.message : '添加配偶失败'
+      showError(msg)
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  /**
+   * 结束婚姻关系（Phase2-B）
+   * 成功后自动 reloadGraph
+   * @param marriageId 婚姻 ID
+   * @param endedReason 可选的结束原因
+   * @param endedAt 可选的结束日期
+   */
+  async function endMarriage(
+    marriageId: string,
+    endedReason?: string | null,
+    endedAt?: string | null,
+  ): Promise<boolean> {
+    if (!usingGraphApi.value) {
+      showError('结束婚姻需要连接真实 API（当前为 mock 模式）')
+      return false
+    }
+    clearMessages()
+    submitting.value = true
+    try {
+      await apiEndUnion(currentFamilyId.value, marriageId, endedReason, endedAt)
+      showSuccess('婚姻状态已更新')
+      endMarriageFormOpen.value = false
+      endMarriageId.value = null
+      await reloadGraph()
+      return true
+    } catch (e) {
+      const msg = e instanceof UnionApiError ? e.message : '结束婚姻失败'
+      showError(msg)
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  function openAddSpouseForm() {
+    addSpouseFormOpen.value = true
+  }
+
+  function closeAddSpouseForm() {
+    addSpouseFormOpen.value = false
+  }
+
+  function openEndMarriageForm(marriageId: string) {
+    endMarriageId.value = marriageId
+    endMarriageFormOpen.value = true
+  }
+
+  function closeEndMarriageForm() {
+    endMarriageFormOpen.value = false
+    endMarriageId.value = null
+  }
+
   function openAddForm() {
     addFormOpen.value = true
   }
@@ -245,6 +348,9 @@ export const useTreeViewStore = defineStore('treeView', () => {
     successMessage,
     editMode,
     addFormOpen,
+    addSpouseFormOpen,
+    endMarriageFormOpen,
+    endMarriageId,
     layout,
     selectedPerson,
     selectedKin,
@@ -258,8 +364,14 @@ export const useTreeViewStore = defineStore('treeView', () => {
     addParentChild,
     createPerson,
     updatePerson,
+    addSpouse,
+    endMarriage,
     openAddForm,
     closeAddForm,
+    openAddSpouseForm,
+    closeAddSpouseForm,
+    openEndMarriageForm,
+    closeEndMarriageForm,
     startEdit,
     cancelEdit,
     clearMessages,
