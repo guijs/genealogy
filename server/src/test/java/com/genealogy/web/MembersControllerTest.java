@@ -10,7 +10,9 @@ import org.springframework.http.MediaType;
 
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -334,5 +336,318 @@ class MembersControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.members.length()").value(4))
                 .andExpect(jsonPath("$.members[?(@.user_id == '%s')].role".formatted(NEW_USER_ID)).value("viewer"));
+    }
+
+    // PATCH /members/{userId} tests
+
+    @Test
+    void updateMemberRole_withoutAuth_returns401() throws Exception {
+        String body = """
+            {"role": "editor"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("authentication required"));
+    }
+
+    @Test
+    void updateMemberRole_nonMember_returns404() throws Exception {
+        String body = """
+            {"role": "editor"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", NON_MEMBER_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("not found"));
+    }
+
+    @Test
+    void updateMemberRole_viewer_returns403() throws Exception {
+        String body = """
+            {"role": "editor"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + EDITOR_USER_ID)
+                        .header("X-User-Id", VIEWER_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("admin access required"));
+    }
+
+    @Test
+    void updateMemberRole_editor_returns403() throws Exception {
+        String body = """
+            {"role": "viewer"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", EDITOR_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("admin access required"));
+    }
+
+    @Test
+    void updateMemberRole_adminUpdatesRole_returns200() throws Exception {
+        String body = """
+            {"role": "editor"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user_id").value(VIEWER_USER_ID.toString()))
+                .andExpect(jsonPath("$.role").value("editor"));
+
+        mockMvc.perform(get("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.members[?(@.user_id == '%s')].role".formatted(VIEWER_USER_ID)).value("editor"));
+    }
+
+    @Test
+    void updateMemberRole_invalidRole_returns400() throws Exception {
+        String body = """
+            {"role": "superuser"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid role"));
+    }
+
+    @Test
+    void updateMemberRole_missingRole_returns400() throws Exception {
+        String body = """
+            {}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("role is required"));
+    }
+
+    @Test
+    void updateMemberRole_emptyRole_returns400() throws Exception {
+        String body = """
+            {"role": ""}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("role is required"));
+    }
+
+    @Test
+    void updateMemberRole_targetNotMember_returns404() throws Exception {
+        String body = """
+            {"role": "viewer"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + NON_MEMBER_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("not found"));
+    }
+
+    @Test
+    void updateMemberRole_invalidUserId_returns404() throws Exception {
+        String body = """
+            {"role": "viewer"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/not-a-uuid")
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("not found"));
+    }
+
+    @Test
+    void updateMemberRole_caseInsensitiveRole_returns200() throws Exception {
+        String body = """
+            {"role": "EDITOR"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user_id").value(VIEWER_USER_ID.toString()))
+                .andExpect(jsonPath("$.role").value("editor"));
+    }
+
+    @Test
+    void updateMemberRole_cannotDemoteLastAdmin_returns409() throws Exception {
+        String body = """
+            {"role": "editor"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + ADMIN_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("cannot remove the last admin"));
+    }
+
+    @Test
+    void updateMemberRole_canDemoteAdminWhenMultipleAdmins_returns200() throws Exception {
+        UUID secondAdminId = UUID.fromString("66666666-6666-6666-6666-666666666666");
+        String addBody = """
+            {"user_id": "%s", "role": "admin"}
+            """.formatted(secondAdminId);
+
+        mockMvc.perform(post("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(addBody))
+                .andExpect(status().isCreated());
+
+        String demoteBody = """
+            {"role": "editor"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + ADMIN_USER_ID)
+                        .header("X-User-Id", secondAdminId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(demoteBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user_id").value(ADMIN_USER_ID.toString()))
+                .andExpect(jsonPath("$.role").value("editor"));
+
+        mockMvc.perform(get("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", secondAdminId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.members[?(@.user_id == '%s')].role".formatted(ADMIN_USER_ID)).value("editor"));
+    }
+
+    // DELETE /members/{userId} tests
+
+    @Test
+    void removeMember_withoutAuth_returns401() throws Exception {
+        mockMvc.perform(delete("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("authentication required"));
+    }
+
+    @Test
+    void removeMember_nonMember_returns404() throws Exception {
+        mockMvc.perform(delete("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", NON_MEMBER_USER_ID.toString()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("not found"));
+    }
+
+    @Test
+    void removeMember_viewer_returns403() throws Exception {
+        mockMvc.perform(delete("/api/v1/families/" + familyId + "/members/" + EDITOR_USER_ID)
+                        .header("X-User-Id", VIEWER_USER_ID.toString()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("admin access required"));
+    }
+
+    @Test
+    void removeMember_editor_returns403() throws Exception {
+        mockMvc.perform(delete("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", EDITOR_USER_ID.toString()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("admin access required"));
+    }
+
+    @Test
+    void removeMember_adminRemovesMember_returns204() throws Exception {
+        mockMvc.perform(delete("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.members.length()").value(2))
+                .andExpect(jsonPath("$.members[?(@.user_id == '%s')]".formatted(VIEWER_USER_ID)).doesNotExist());
+    }
+
+    @Test
+    void removeMember_targetNotMember_returns404() throws Exception {
+        mockMvc.perform(delete("/api/v1/families/" + familyId + "/members/" + NON_MEMBER_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("not found"));
+    }
+
+    @Test
+    void removeMember_invalidUserId_returns404() throws Exception {
+        mockMvc.perform(delete("/api/v1/families/" + familyId + "/members/not-a-uuid")
+                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("not found"));
+    }
+
+    @Test
+    void removeMember_cannotRemoveLastAdmin_returns409() throws Exception {
+        mockMvc.perform(delete("/api/v1/families/" + familyId + "/members/" + ADMIN_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("cannot remove the last admin"));
+    }
+
+    @Test
+    void removeMember_canRemoveAdminWhenMultipleAdmins_returns204() throws Exception {
+        UUID secondAdminId = UUID.fromString("66666666-6666-6666-6666-666666666666");
+        String body = """
+            {"user_id": "%s", "role": "admin"}
+            """.formatted(secondAdminId);
+
+        mockMvc.perform(post("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(delete("/api/v1/families/" + familyId + "/members/" + ADMIN_USER_ID)
+                        .header("X-User-Id", secondAdminId.toString()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", secondAdminId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.members.length()").value(3))
+                .andExpect(jsonPath("$.members[?(@.user_id == '%s')]".formatted(ADMIN_USER_ID)).doesNotExist());
+    }
+
+    @Test
+    void removeMember_removedUserCannotAccessFamily() throws Exception {
+        mockMvc.perform(delete("/api/v1/families/" + familyId + "/members/" + VIEWER_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/families/" + familyId)
+                        .header("X-User-Id", VIEWER_USER_ID.toString()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("not found"));
     }
 }

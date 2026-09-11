@@ -48,4 +48,20 @@
         ORDER BY f.name
     </select>
 
+    <update id="updateRole">
+        UPDATE family_members
+        SET role = #{role}
+        WHERE family_id = #{familyId} AND user_id = #{userId}
+    </update>
+
+    <delete id="deleteByFamilyAndUser">
+        DELETE FROM family_members
+        WHERE family_id = #{familyId} AND user_id = #{userId}
+    </delete>
+
+    <select id="countAdminsByFamilyId" resultType="int">
+        SELECT COUNT(*) FROM family_members
+        WHERE family_id = #{familyId} AND role = 'admin'
+    </select>
+
 </mapper>
