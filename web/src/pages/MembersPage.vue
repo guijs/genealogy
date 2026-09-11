@@ -5,6 +5,8 @@ import { isUsingGraphApi } from '../features/tree/api/graphClient'
 import {
   listMembers,
   addMember,
+  updateMemberRole,
+  removeMember,
   MemberApiError,
   type FamilyMember,
   type MemberRole,
@@ -16,6 +18,8 @@ const route = useRoute()
 const members = ref<FamilyMember[]>([])
 const loading = ref(false)
 const submitting = ref(false)
+const updatingMember = ref<string | null>(null)
+const removingMember = ref<string | null>(null)
 const errorMessage = ref('')
 const successMessage = ref('')
 
@@ -24,6 +28,16 @@ const addRole = ref<MemberRole>('viewer')
 
 const usingGraphApi = computed(() => isUsingGraphApi())
 const familyId = computed(() => route.query.familyId as string | undefined)
+
+const currentUserId = computed(() => {
+  return (import.meta.env.VITE_GRAPH_USER_ID as string | undefined)?.trim() ?? ''
+})
+
+const isAdmin = computed(() => {
+  if (!currentUserId.value) return false
+  const currentMember = members.value.find((m) => m.user_id === currentUserId.value)
+  return currentMember?.role === 'admin'
+})
 
 const canSubmit = computed(() => {
   const userId = addUserId.value.trim()
@@ -100,6 +114,64 @@ async function handleAddMember() {
     }
   } finally {
     submitting.value = false
+  }
+}
+
+async function handleRoleChange(userId: string, newRole: MemberRole) {
+  if (!familyId.value || updatingMember.value) return
+
+  updatingMember.value = userId
+  errorMessage.value = ''
+  successMessage.value = ''
+
+  try {
+    const result = await updateMemberRole(familyId.value, userId, newRole)
+    members.value = members.value.map((m) =>
+      m.user_id === userId ? { ...m, role: result.role } : m
+    )
+    successMessage.value = '角色更新成功'
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 3000)
+  } catch (err) {
+    if (err instanceof MemberApiError) {
+      errorMessage.value = err.message
+    } else {
+      errorMessage.value = '更新角色失败，请稍后重试'
+    }
+  } finally {
+    updatingMember.value = null
+  }
+}
+
+async function handleRemoveMember(userId: string) {
+  if (!familyId.value || removingMember.value) return
+
+  const member = members.value.find((m) => m.user_id === userId)
+  if (!member) return
+
+  const confirmed = window.confirm(`确定要移除该成员吗？\n用户 ID: ${userId}`)
+  if (!confirmed) return
+
+  removingMember.value = userId
+  errorMessage.value = ''
+  successMessage.value = ''
+
+  try {
+    await removeMember(familyId.value, userId)
+    members.value = members.value.filter((m) => m.user_id !== userId)
+    successMessage.value = '成员已移除'
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 3000)
+  } catch (err) {
+    if (err instanceof MemberApiError) {
+      errorMessage.value = err.message
+    } else {
+      errorMessage.value = '移除成员失败，请稍后重试'
+    }
+  } finally {
+    removingMember.value = null
   }
 }
 
@@ -192,15 +264,42 @@ function getRoleLabel(role: MemberRole): string {
               <div class="member-info">
                 <span class="member-label">用户 ID</span>
                 <code class="member-id">{{ member.user_id }}</code>
+                <span v-if="member.user_id === currentUserId" class="member-badge">（当前用户）</span>
               </div>
-              <span class="member-role" :class="`role-${member.role}`">
-                {{ getRoleLabel(member.role) }}
-              </span>
+              <div class="member-actions">
+                <template v-if="isAdmin">
+                  <select
+                    class="role-select"
+                    :value="member.role"
+                    :disabled="updatingMember === member.user_id || removingMember === member.user_id"
+                    @change="(e) => handleRoleChange(member.user_id, (e.target as HTMLSelectElement).value as MemberRole)"
+                  >
+                    <option
+                      v-for="opt in roleOptions"
+                      :key="opt.value"
+                      :value="opt.value"
+                    >
+                      {{ opt.label }}
+                    </option>
+                  </select>
+                  <button
+                    type="button"
+                    class="btn-danger-sm"
+                    :disabled="removingMember === member.user_id || updatingMember === member.user_id"
+                    @click="handleRemoveMember(member.user_id)"
+                  >
+                    {{ removingMember === member.user_id ? '移除中…' : '移除' }}
+                  </button>
+                </template>
+                <span v-else class="member-role" :class="`role-${member.role}`">
+                  {{ getRoleLabel(member.role) }}
+                </span>
+              </div>
             </li>
           </ul>
         </div>
 
-        <div class="form-card">
+        <div v-if="isAdmin" class="form-card">
           <h2 class="card-title">添加成员</h2>
 
           <div v-if="!usingGraphApi" class="warning-banner">
@@ -413,6 +512,59 @@ function getRoleLabel(role: MemberRole): string {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.member-badge {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+}
+
+.member-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.role-select {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border, #d8d4cc);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  cursor: pointer;
+}
+
+.role-select:focus {
+  outline: none;
+  border-color: var(--color-accent, #2f5d50);
+}
+
+.role-select:disabled {
+  background: #f0eeeb;
+  cursor: not-allowed;
+}
+
+.btn-danger-sm {
+  padding: 6px 12px;
+  border: 1px solid #c53030;
+  border-radius: 6px;
+  background: #fff;
+  color: #c53030;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-danger-sm:hover:not(:disabled) {
+  background: #c53030;
+  color: #fff;
+}
+
+.btn-danger-sm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .member-label {

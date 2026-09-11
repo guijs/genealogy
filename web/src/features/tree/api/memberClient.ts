@@ -3,13 +3,16 @@
  *
  * - GET /api/v1/families/{familyId}/members — list members
  * - POST /api/v1/families/{familyId}/members — add member
+ * - PATCH /api/v1/families/{familyId}/members/{userId} — update member role
+ * - DELETE /api/v1/families/{familyId}/members/{userId} — remove member
  *
  * Constraints:
  * - Auth: X-User-Id header = VITE_GRAPH_USER_ID
  * - familyId in path (from route query)
  * - Only available when real API mode is on (VITE_USE_GRAPH_API / VITE_GRAPH_API_BASE)
  * - Mock mode: cannot fake write/list success pretending persistence
- * - NO role change PATCH, NO remove member (backend not ready)
+ * - PATCH/DELETE require admin role (403 otherwise)
+ * - 409 returned when trying to remove/demote the last admin
  */
 import { isUsingGraphApi } from './graphClient'
 
@@ -34,6 +37,17 @@ export interface AddMemberResponse {
   role: MemberRole
 }
 
+export interface UpdateMemberRoleRequest {
+  role: MemberRole
+}
+
+export interface UpdateMemberRoleResponse {
+  user_id: string
+  role: MemberRole
+}
+
+export type ErrorContext = 'add' | 'updateRole' | 'remove'
+
 export class MemberApiError extends Error {
   readonly status: number
   readonly code?: string
@@ -45,12 +59,15 @@ export class MemberApiError extends Error {
     this.code = code
   }
 
-  static fromStatus(status: number, url: string): MemberApiError {
+  static fromStatus(status: number, url: string, context?: ErrorContext): MemberApiError {
     const messages: Record<number, string> = {
       400: '请求参数无效',
       401: '需要认证',
       403: '需要管理员权限',
       409: '该用户已是家族成员',
+    }
+    if (status === 409 && (context === 'updateRole' || context === 'remove')) {
+      return new MemberApiError('不能移除或降级最后一个管理员', status, 'LAST_ADMIN')
     }
     return new MemberApiError(
       messages[status] ?? `请求失败: ${status} (${url})`,
@@ -148,8 +165,82 @@ export async function addMember(
   })
 
   if (!res.ok) {
-    throw MemberApiError.fromStatus(res.status, url)
+    throw MemberApiError.fromStatus(res.status, url, 'add')
   }
 
   return (await res.json()) as AddMemberResponse
+}
+
+/**
+ * Update a member's role
+ * PATCH /api/v1/families/{familyId}/members/{userId}
+ *
+ * @param familyId - The family ID
+ * @param userId - The user ID to update
+ * @param role - The new role
+ * @returns UpdateMemberRoleResponse { user_id, role }
+ * @throws MemberApiError 400/401/403/409
+ */
+export async function updateMemberRole(
+  familyId: string,
+  userId: string,
+  role: MemberRole,
+): Promise<UpdateMemberRoleResponse> {
+  ensureRealApi()
+
+  if (!familyId) {
+    throw new MemberApiError('familyId 不能为空', 400, 'INVALID_FAMILY_ID')
+  }
+  if (!userId) {
+    throw new MemberApiError('userId 不能为空', 400, 'INVALID_USER_ID')
+  }
+
+  const base = apiBase()
+  const url = `${base}/api/v1/families/${encodeURIComponent(familyId)}/members/${encodeURIComponent(userId)}`
+
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify({ role }),
+  })
+
+  if (!res.ok) {
+    throw MemberApiError.fromStatus(res.status, url, 'updateRole')
+  }
+
+  return (await res.json()) as UpdateMemberRoleResponse
+}
+
+/**
+ * Remove a member from a family
+ * DELETE /api/v1/families/{familyId}/members/{userId}
+ *
+ * @param familyId - The family ID
+ * @param userId - The user ID to remove
+ * @throws MemberApiError 401/403/404/409
+ */
+export async function removeMember(
+  familyId: string,
+  userId: string,
+): Promise<void> {
+  ensureRealApi()
+
+  if (!familyId) {
+    throw new MemberApiError('familyId 不能为空', 400, 'INVALID_FAMILY_ID')
+  }
+  if (!userId) {
+    throw new MemberApiError('userId 不能为空', 400, 'INVALID_USER_ID')
+  }
+
+  const base = apiBase()
+  const url = `${base}/api/v1/families/${encodeURIComponent(familyId)}/members/${encodeURIComponent(userId)}`
+
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+
+  if (!res.ok) {
+    throw MemberApiError.fromStatus(res.status, url, 'remove')
+  }
 }
