@@ -5,7 +5,13 @@ import com.genealogy.domain.person.Person;
 import com.genealogy.service.PersonService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
-import com.genealogy.web.dto.*;
+import com.genealogy.web.dto.CreatePersonRequest;
+import com.genealogy.web.dto.ErrorResponse;
+import com.genealogy.web.dto.FamilyResponse;
+import com.genealogy.web.dto.HidePersonRequest;
+import com.genealogy.web.dto.PersonResponse;
+import com.genealogy.web.dto.PersonsListResponse;
+import com.genealogy.web.dto.UpdatePersonRequest;
 import com.genealogy.web.filter.FamilyMembershipFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -111,6 +117,57 @@ public class FamilyController {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         } catch (PersonService.InvalidNameException e) {
             return ResponseEntity.status(400).body(new ErrorResponse(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/persons/{personId}/hide")
+    public ResponseEntity<?> hidePerson(HttpServletRequest request,
+                                        @PathVariable String personId,
+                                        @RequestBody(required = false) HidePersonRequest body) {
+        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
+        if (familyId == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        UUID personUUID;
+        try {
+            personUUID = UUID.fromString(personId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        boolean confirmActiveUnion = body != null && body.isConfirmHideWithActiveUnion();
+
+        try {
+            personService.hidePerson(familyId, personUUID, confirmActiveUnion);
+            return ResponseEntity.ok().build();
+        } catch (PersonService.PersonNotFoundException e) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        } catch (PersonService.ActiveUnionRequiresConfirmException e) {
+            return ResponseEntity.status(409).body(new ErrorResponse(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/persons/{personId}/restore")
+    public ResponseEntity<?> restorePerson(HttpServletRequest request,
+                                           @PathVariable String personId) {
+        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
+        if (familyId == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        UUID personUUID;
+        try {
+            personUUID = UUID.fromString(personId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        try {
+            personService.restorePerson(familyId, personUUID);
+            return ResponseEntity.ok().build();
+        } catch (PersonService.PersonNotFoundException e) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         }
     }
 }

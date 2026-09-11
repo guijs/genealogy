@@ -36,6 +36,12 @@ public class WriteAccessFilter extends OncePerRequestFilter {
     private static final Pattern UNIONS_END_PATH_PATTERN = 
             Pattern.compile("^/api/v1/families/[^/]+/unions/[^/]+/end$");
 
+    private static final Pattern PERSONS_HIDE_PATH_PATTERN = 
+            Pattern.compile("^/api/v1/families/[^/]+/persons/[^/]+/hide$");
+
+    private static final Pattern PERSONS_RESTORE_PATH_PATTERN = 
+            Pattern.compile("^/api/v1/families/[^/]+/persons/[^/]+/restore$");
+
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -82,6 +88,12 @@ public class WriteAccessFilter extends OncePerRequestFilter {
             return true;
         }
         if ("POST".equals(method) && UNIONS_END_PATH_PATTERN.matcher(path).matches()) {
+            return true;
+        }
+        if ("POST".equals(method) && PERSONS_HIDE_PATH_PATTERN.matcher(path).matches()) {
+            return true;
+        }
+        if ("POST".equals(method) && PERSONS_RESTORE_PATH_PATTERN.matcher(path).matches()) {
             return true;
         }
         return false;

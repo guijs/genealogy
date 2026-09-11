@@ -4,6 +4,7 @@ import com.genealogy.domain.person.Person;
 import com.genealogy.domain.projection.ProjectionPerson;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
+import com.genealogy.store.UnionStore;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -15,10 +16,12 @@ public class PersonService {
 
     private final PersonStore personStore;
     private final ProjectionStore projectionStore;
+    private final UnionStore unionStore;
 
-    public PersonService(PersonStore personStore, ProjectionStore projectionStore) {
+    public PersonService(PersonStore personStore, ProjectionStore projectionStore, UnionStore unionStore) {
         this.personStore = personStore;
         this.projectionStore = projectionStore;
+        this.unionStore = unionStore;
     }
 
     public static class PersonCapExceededException extends RuntimeException {
@@ -36,6 +39,24 @@ public class PersonService {
     public static class InvalidNameException extends RuntimeException {
         public InvalidNameException(String message) {
             super(message);
+        }
+    }
+
+    public static class ActiveUnionRequiresConfirmException extends RuntimeException {
+        public ActiveUnionRequiresConfirmException() {
+            super("person has an active union; set confirm_hide_with_active_union to true or end the union first");
+        }
+    }
+
+    public static class PersonAlreadyHiddenException extends RuntimeException {
+        public PersonAlreadyHiddenException() {
+            super("person is already hidden");
+        }
+    }
+
+    public static class PersonNotHiddenException extends RuntimeException {
+        public PersonNotHiddenException() {
+            super("person is not hidden");
         }
     }
 
@@ -101,7 +122,7 @@ public class PersonService {
                     existingProjection.getGender(),
                     existingProjection.getBirthYear(),
                     existingProjection.getDeathYear(),
-                    false);
+                    existingProjection.isHidden());
         } else {
             projectionPerson = new ProjectionPerson(personId, familyId, displayName, null, null, null, false);
         }
@@ -126,5 +147,66 @@ public class PersonService {
 
     private boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    public void hidePerson(UUID familyId, UUID personId, boolean confirmActiveUnion) {
+        Optional<Person> existingOpt = personStore.getPerson(personId);
+        if (existingOpt.isEmpty() || !existingOpt.get().getFamilyId().equals(familyId)) {
+            throw new PersonNotFoundException();
+        }
+
+        Optional<ProjectionPerson> projectionOpt = projectionStore.getPerson(personId);
+        if (projectionOpt.isEmpty()) {
+            throw new PersonNotFoundException();
+        }
+
+        ProjectionPerson existing = projectionOpt.get();
+        if (existing.isHidden()) {
+            return;
+        }
+
+        boolean hasActiveUnion = unionStore.hasActiveUnion(personId);
+        if (hasActiveUnion && !confirmActiveUnion) {
+            throw new ActiveUnionRequiresConfirmException();
+        }
+
+        ProjectionPerson updated = new ProjectionPerson(
+                existing.getId(),
+                existing.getFamilyId(),
+                existing.getDisplayName(),
+                existing.getGender(),
+                existing.getBirthYear(),
+                existing.getDeathYear(),
+                true
+        );
+        projectionStore.upsertPerson(updated);
+    }
+
+    public void restorePerson(UUID familyId, UUID personId) {
+        Optional<Person> existingOpt = personStore.getPerson(personId);
+        if (existingOpt.isEmpty() || !existingOpt.get().getFamilyId().equals(familyId)) {
+            throw new PersonNotFoundException();
+        }
+
+        Optional<ProjectionPerson> projectionOpt = projectionStore.getPerson(personId);
+        if (projectionOpt.isEmpty()) {
+            throw new PersonNotFoundException();
+        }
+
+        ProjectionPerson existing = projectionOpt.get();
+        if (!existing.isHidden()) {
+            return;
+        }
+
+        ProjectionPerson updated = new ProjectionPerson(
+                existing.getId(),
+                existing.getFamilyId(),
+                existing.getDisplayName(),
+                existing.getGender(),
+                existing.getBirthYear(),
+                existing.getDeathYear(),
+                false
+        );
+        projectionStore.upsertPerson(updated);
     }
 }
