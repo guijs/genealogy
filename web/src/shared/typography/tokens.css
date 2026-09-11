@@ -1,0 +1,26 @@
+/* P0 长辈可读字号 token — 对齐 15-ux-elder-typography-p0.md */
+:root {
+  --type-tree-name: 18px;
+  --type-tree-name-weight: 600;
+  --type-tree-name-lh: 1.35;
+  --type-tree-meta: 13px;
+
+  --type-detail-name: 22px;
+  --type-detail-name-weight: 600;
+  --type-detail-section: 16px;
+  --type-kin-label: 15px;
+  --type-kin-name: 16px;
+  --type-body: 15px;
+  --type-caption: 13px;
+
+  --color-ink: #1f1f1f;
+  --color-ink-muted: #2a2a2a;
+  --color-paper: #faf9f7;
+  --color-card: #ffffff;
+  --color-border: #d8d4cc;
+  --color-accent: #2f5d50;
+  --color-ended: #8a8580;
+  --color-banner: #fff4e5;
+  --color-banner-border: #e6a23c;
+  --font-cn: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+}
