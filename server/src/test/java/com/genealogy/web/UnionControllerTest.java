@@ -4,18 +4,12 @@ import com.genealogy.domain.family.Role;
 import com.genealogy.domain.person.Person;
 import com.genealogy.domain.projection.MarriageStatus;
 import com.genealogy.domain.union.Union;
-import com.genealogy.service.UnionService;
 import com.genealogy.store.*;
-import com.genealogy.web.filter.AuthFilter;
-import com.genealogy.web.filter.FamilyMembershipFilter;
-import com.genealogy.web.filter.WriteAccessFilter;
+import com.genealogy.support.BaseIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
@@ -23,13 +17,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(UnionController.class)
-@Import({FamilyStore.class, PersonStore.class, UnionStore.class, ProjectionStore.class, UnionService.class,
-        AuthFilter.class, FamilyMembershipFilter.class, WriteAccessFilter.class})
-class UnionControllerTest {
-
-    @Autowired
-    private MockMvc mockMvc;
+class UnionControllerTest extends BaseIntegrationTest {
 
     @Autowired
     private FamilyStore familyStore;
@@ -55,10 +43,7 @@ class UnionControllerTest {
 
     @BeforeEach
     void setUp() {
-        familyStore.clear();
-        personStore.clear();
-        unionStore.clear();
-        projectionStore.clear();
+        cleanAllData();
 
         familyStore.createFamily(FAMILY_ID, FAMILY_NAME);
         familyStore.addMemberWithRole(FAMILY_ID, ADMIN_USER_ID, Role.ADMIN);

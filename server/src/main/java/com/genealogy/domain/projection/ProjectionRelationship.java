@@ -13,7 +13,7 @@ public class ProjectionRelationship {
     private final boolean dissolved;
 
     public ProjectionRelationship(UUID id, UUID familyId, UUID parentId, UUID childId,
-                                   ParentChildSubtype subtype, ParentRole role, UUID marriageId, boolean dissolved) {
+                                   ParentChildSubtype subtype, ParentRole role, UUID marriageId, Boolean dissolved) {
         this.id = id;
         this.familyId = familyId;
         this.parentId = parentId;
@@ -21,7 +21,7 @@ public class ProjectionRelationship {
         this.subtype = subtype;
         this.role = role;
         this.marriageId = marriageId;
-        this.dissolved = dissolved;
+        this.dissolved = dissolved != null && dissolved;
     }
 
     public UUID getId() {

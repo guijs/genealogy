@@ -3,29 +3,33 @@ package com.genealogy.store;
 import com.genealogy.domain.family.Family;
 import com.genealogy.domain.family.Membership;
 import com.genealogy.domain.family.Role;
+import com.genealogy.mapper.FamilyMapper;
+import com.genealogy.mapper.FamilyMemberMapper;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class FamilyStore {
-    private final Map<UUID, Family> families = new ConcurrentHashMap<>();
-    private final Map<UUID, Map<UUID, Membership>> memberships = new ConcurrentHashMap<>();
+    private final FamilyMapper familyMapper;
+    private final FamilyMemberMapper familyMemberMapper;
+
+    public FamilyStore(FamilyMapper familyMapper, FamilyMemberMapper familyMemberMapper) {
+        this.familyMapper = familyMapper;
+        this.familyMemberMapper = familyMemberMapper;
+    }
 
     public void createFamily(UUID familyId, String name) {
-        families.put(familyId, new Family(familyId, name));
-        memberships.put(familyId, new ConcurrentHashMap<>());
+        familyMapper.insert(familyId, name);
     }
 
     public boolean familyExists(UUID familyId) {
-        return families.containsKey(familyId);
+        return familyMapper.existsById(familyId);
     }
 
     public Optional<Family> getFamily(UUID familyId) {
-        return Optional.ofNullable(families.get(familyId));
+        return Optional.ofNullable(familyMapper.findById(familyId));
     }
 
     public void addMember(UUID familyId, UUID userId) {
@@ -33,25 +37,19 @@ public class FamilyStore {
     }
 
     public void addMemberWithRole(UUID familyId, UUID userId, Role role) {
-        memberships.computeIfAbsent(familyId, k -> new ConcurrentHashMap<>())
-                .put(userId, new Membership(userId, role));
+        familyMemberMapper.insert(familyId, userId, role.getValue());
     }
 
     public boolean isMember(UUID familyId, UUID userId) {
-        Map<UUID, Membership> familyMembers = memberships.get(familyId);
-        return familyMembers != null && familyMembers.containsKey(userId);
+        return familyMemberMapper.existsByFamilyAndUser(familyId, userId);
     }
 
     public Optional<Membership> getMembership(UUID familyId, UUID userId) {
-        Map<UUID, Membership> familyMembers = memberships.get(familyId);
-        if (familyMembers == null) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(familyMembers.get(userId));
+        return Optional.ofNullable(familyMemberMapper.findByFamilyAndUser(familyId, userId));
     }
 
     public void clear() {
-        families.clear();
-        memberships.clear();
+        familyMemberMapper.deleteAll();
+        familyMapper.deleteAll();
     }
 }

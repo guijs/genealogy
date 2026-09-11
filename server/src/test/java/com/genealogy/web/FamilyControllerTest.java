@@ -2,19 +2,13 @@ package com.genealogy.web;
 
 import com.genealogy.domain.family.Role;
 import com.genealogy.domain.person.Person;
-import com.genealogy.service.PersonService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
-import com.genealogy.store.UnionStore;
-import com.genealogy.web.filter.AuthFilter;
-import com.genealogy.web.filter.FamilyMembershipFilter;
+import com.genealogy.support.BaseIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
@@ -22,19 +16,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(FamilyController.class)
-@Import({FamilyStore.class, PersonStore.class, ProjectionStore.class, UnionStore.class, PersonService.class,
-        AuthFilter.class, FamilyMembershipFilter.class})
-class FamilyControllerTest {
-
-    @Autowired
-    private MockMvc mockMvc;
+class FamilyControllerTest extends BaseIntegrationTest {
 
     @Autowired
     private FamilyStore familyStore;
 
     @Autowired
     private PersonStore personStore;
+
+    @Autowired
+    private ProjectionStore projectionStore;
 
     private static final UUID FAMILY_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID MEMBER_USER_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
@@ -45,8 +36,7 @@ class FamilyControllerTest {
 
     @BeforeEach
     void setUp() {
-        familyStore.clear();
-        personStore.clear();
+        cleanAllData();
         
         familyStore.createFamily(FAMILY_ID, FAMILY_NAME);
         familyStore.addMemberWithRole(FAMILY_ID, MEMBER_USER_ID, Role.ADMIN);
