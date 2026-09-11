@@ -57,6 +57,18 @@ public class FamilyStore {
         return familyMemberMapper.findByFamilyId(familyId);
     }
 
+    public void updateMemberRole(UUID familyId, UUID userId, Role role) {
+        familyMemberMapper.updateRole(familyId, userId, role.getValue());
+    }
+
+    public void removeMember(UUID familyId, UUID userId) {
+        familyMemberMapper.deleteByFamilyAndUser(familyId, userId);
+    }
+
+    public int countAdmins(UUID familyId) {
+        return familyMemberMapper.countAdminsByFamilyId(familyId);
+    }
+
     public void clear() {
         familyMemberMapper.deleteAll();
         familyMapper.deleteAll();

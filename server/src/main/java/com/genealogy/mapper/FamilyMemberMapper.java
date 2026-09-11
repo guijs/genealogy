@@ -21,5 +21,11 @@ public interface FamilyMemberMapper {
     
     List<Membership> findByFamilyId(@Param("familyId") UUID familyId);
     
+    void updateRole(@Param("familyId") UUID familyId, @Param("userId") UUID userId, @Param("role") String role);
+    
+    void deleteByFamilyAndUser(@Param("familyId") UUID familyId, @Param("userId") UUID userId);
+    
+    int countAdminsByFamilyId(@Param("familyId") UUID familyId);
+    
     void deleteAll();
 }

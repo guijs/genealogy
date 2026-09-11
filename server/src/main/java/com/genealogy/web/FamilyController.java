@@ -17,6 +17,7 @@ import com.genealogy.web.dto.MemberResponse;
 import com.genealogy.web.dto.MembersListResponse;
 import com.genealogy.web.dto.PersonResponse;
 import com.genealogy.web.dto.PersonsListResponse;
+import com.genealogy.web.dto.UpdateMemberRoleRequest;
 import com.genealogy.web.dto.UpdatePersonRequest;
 import com.genealogy.web.filter.FamilyMembershipFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -238,5 +239,85 @@ public class FamilyController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(new MembersListResponse(memberResponses));
+    }
+
+    @PatchMapping("/members/{userId}")
+    @Transactional
+    public ResponseEntity<?> updateMemberRole(HttpServletRequest request,
+                                              @PathVariable String userId,
+                                              @RequestBody UpdateMemberRoleRequest body) {
+        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
+        if (familyId == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        Membership membership = (Membership) request.getAttribute(FamilyMembershipFilter.MEMBERSHIP_ATTRIBUTE);
+        if (membership == null || membership.getRole() != Role.ADMIN) {
+            return ResponseEntity.status(403).body(new ErrorResponse("admin access required"));
+        }
+
+        UUID targetUserId;
+        try {
+            targetUserId = UUID.fromString(userId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        if (!familyStore.isMember(familyId, targetUserId)) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        if (body.getRole() == null || body.getRole().isBlank()) {
+            return ResponseEntity.status(400).body(new ErrorResponse("role is required"));
+        }
+
+        Role newRole;
+        try {
+            newRole = Role.valueOf(body.getRole().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(new ErrorResponse("invalid role"));
+        }
+
+        familyStore.updateMemberRole(familyId, targetUserId, newRole);
+
+        return ResponseEntity.ok(new MemberResponse(targetUserId.toString(), newRole.getValue()));
+    }
+
+    @DeleteMapping("/members/{userId}")
+    @Transactional
+    public ResponseEntity<?> removeMember(HttpServletRequest request,
+                                          @PathVariable String userId) {
+        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
+        if (familyId == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        Membership membership = (Membership) request.getAttribute(FamilyMembershipFilter.MEMBERSHIP_ATTRIBUTE);
+        if (membership == null || membership.getRole() != Role.ADMIN) {
+            return ResponseEntity.status(403).body(new ErrorResponse("admin access required"));
+        }
+
+        UUID targetUserId;
+        try {
+            targetUserId = UUID.fromString(userId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        Optional<Membership> targetMembership = familyStore.getMembership(familyId, targetUserId);
+        if (targetMembership.isEmpty()) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        if (targetMembership.get().getRole() == Role.ADMIN) {
+            int adminCount = familyStore.countAdmins(familyId);
+            if (adminCount <= 1) {
+                return ResponseEntity.status(409).body(new ErrorResponse("cannot remove the last admin"));
+            }
+        }
+
+        familyStore.removeMember(familyId, targetUserId);
+
+        return ResponseEntity.noContent().build();
     }
 }
