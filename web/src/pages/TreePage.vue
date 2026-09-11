@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import TreeCanvas from '../features/tree/canvas/TreeCanvas.vue'
 import PersonDetailDrawer from '../features/tree/panels/PersonDetailDrawer.vue'
@@ -13,6 +13,10 @@ const {
   graph,
   usingGraphApi,
   addFormOpen,
+  addSpouseFormOpen,
+  endMarriageFormOpen,
+  endMarriageId,
+  selectedPerson,
   submitting,
   errorMessage,
   successMessage,
@@ -20,9 +24,20 @@ const {
 
 const addFirstName = ref('')
 const addLastName = ref('')
+const selectedSpouseId = ref('')
+const spouseStartedAt = ref('')
+const endMarriageReason = ref('')
+const endMarriageDate = ref('')
 
 onMounted(() => {
   void store.loadDemo()
+})
+
+const availableSpouseCandidates = computed(() => {
+  if (!graph.value || !selectedPerson.value) return []
+  return graph.value.persons.filter(
+    (p) => p.id !== selectedPerson.value?.id,
+  )
 })
 
 function openAddForm() {
@@ -48,6 +63,56 @@ async function handleAddPerson() {
 
 function handleCancelAdd() {
   store.closeAddForm()
+}
+
+watch(addSpouseFormOpen, (open) => {
+  if (open) {
+    selectedSpouseId.value = ''
+    spouseStartedAt.value = ''
+  }
+})
+
+watch(endMarriageFormOpen, (open) => {
+  if (open) {
+    endMarriageReason.value = ''
+    endMarriageDate.value = ''
+  }
+})
+
+async function handleAddSpouse() {
+  const partnerId = selectedSpouseId.value.trim()
+  if (!partnerId) return
+
+  const ok = await store.addSpouse(
+    partnerId,
+    spouseStartedAt.value.trim() || null,
+  )
+  if (ok) {
+    selectedSpouseId.value = ''
+    spouseStartedAt.value = ''
+  }
+}
+
+function handleCancelAddSpouse() {
+  store.closeAddSpouseForm()
+}
+
+async function handleEndMarriage() {
+  if (!endMarriageId.value) return
+
+  const ok = await store.endMarriage(
+    endMarriageId.value,
+    endMarriageReason.value.trim() || null,
+    endMarriageDate.value.trim() || null,
+  )
+  if (ok) {
+    endMarriageReason.value = ''
+    endMarriageDate.value = ''
+  }
+}
+
+function handleCancelEndMarriage() {
+  store.closeEndMarriageForm()
 }
 </script>
 
@@ -137,6 +202,115 @@ function handleCancelAdd() {
             class="btn-close"
             :disabled="submitting"
             @click="handleCancelAdd"
+          >
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加配偶表单（模态） -->
+    <div v-if="addSpouseFormOpen" class="modal-overlay" @click.self="handleCancelAddSpouse">
+      <div class="modal-box">
+        <h2 class="modal-title">添加配偶</h2>
+        <p class="modal-desc">
+          为 <strong>{{ selectedPerson?.displayName }}</strong> 添加配偶
+        </p>
+        <div class="form-row">
+          <label class="form-label">选择配偶</label>
+          <select
+            v-model="selectedSpouseId"
+            class="form-select"
+            :disabled="submitting"
+          >
+            <option value="">请选择...</option>
+            <option
+              v-for="p in availableSpouseCandidates"
+              :key="p.id"
+              :value="p.id"
+            >
+              {{ p.displayName }}
+            </option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">结婚日期（可选）</label>
+          <input
+            v-model="spouseStartedAt"
+            type="text"
+            class="form-input"
+            placeholder="如：1990 或 1990-06-15"
+            :disabled="submitting"
+          />
+        </div>
+        <p class="form-note">
+          添加配偶后将创建婚姻关系
+        </p>
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-submit"
+            :disabled="submitting || !selectedSpouseId"
+            @click="handleAddSpouse"
+          >
+            {{ submitting ? '添加中…' : '添加' }}
+          </button>
+          <button
+            type="button"
+            class="btn-close"
+            :disabled="submitting"
+            @click="handleCancelAddSpouse"
+          >
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 结束婚姻表单（模态） -->
+    <div v-if="endMarriageFormOpen" class="modal-overlay" @click.self="handleCancelEndMarriage">
+      <div class="modal-box">
+        <h2 class="modal-title">结束婚姻</h2>
+        <p class="modal-desc">
+          确认要结束此婚姻关系吗？这不会删除配偶信息。
+        </p>
+        <div class="form-row">
+          <label class="form-label">结束原因（可选）</label>
+          <select
+            v-model="endMarriageReason"
+            class="form-select"
+            :disabled="submitting"
+          >
+            <option value="">请选择...</option>
+            <option value="divorced">离婚</option>
+            <option value="widowed">丧偶</option>
+            <option value="other">其他</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">结束日期（可选）</label>
+          <input
+            v-model="endMarriageDate"
+            type="text"
+            class="form-input"
+            placeholder="如：2020 或 2020-01-15"
+            :disabled="submitting"
+          />
+        </div>
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-submit btn-danger"
+            :disabled="submitting"
+            @click="handleEndMarriage"
+          >
+            {{ submitting ? '处理中…' : '确认结束' }}
+          </button>
+          <button
+            type="button"
+            class="btn-close"
+            :disabled="submitting"
+            @click="handleCancelEndMarriage"
           >
             取消
           </button>
@@ -343,5 +517,34 @@ function handleCancelAdd() {
 .btn-close:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.form-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border, #d8d4cc);
+  border-radius: 6px;
+  font-size: 15px;
+  font-family: inherit;
+  box-sizing: border-box;
+  background: #fff;
+}
+.form-select:focus {
+  outline: none;
+  border-color: var(--color-accent, #2f5d50);
+}
+.form-select:disabled {
+  background: #f0eeeb;
+  cursor: not-allowed;
+}
+.modal-desc {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: #555;
+}
+.btn-danger {
+  background: #c53030;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #9b2c2c;
 }
 </style>
