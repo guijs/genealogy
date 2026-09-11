@@ -113,3 +113,17 @@ export interface LayoutResult {
   edges: PositionedEdge[]
   unions: Union[]
 }
+
+/**
+ * POST /api/v1/families/{familyId}/relationships 请求体。
+ * Java 端使用 @JsonProperty 注解，字段为 snake_case。
+ */
+export interface AddRelationshipRequest {
+  parent_id: string
+  child_id: string
+  relationship_type: 'biological' | 'adoptive'
+}
+
+export interface AddRelationshipResponse {
+  success: boolean
+}
