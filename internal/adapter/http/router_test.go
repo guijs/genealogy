@@ -718,7 +718,7 @@ func TestGraph_NonMember_Returns404(t *testing.T) {
 	}
 }
 
-func TestGraph_DepthClamp_MaxIs8(t *testing.T) {
+func TestGraph_DepthExceedsMax_Returns400(t *testing.T) {
 	deps := setupTestRouterWithStores()
 	familyID := uuid.New()
 	adminID := uuid.New()
@@ -732,21 +732,20 @@ func TestGraph_DepthClamp_MaxIs8(t *testing.T) {
 		DisplayName: "Root Person",
 	})
 
-	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+rootPersonID.String()+"&depth=20", nil)
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+rootPersonID.String()+"&depth=9", nil)
 	req.Header.Set("X-User-Id", adminID.String())
 	w := httptest.NewRecorder()
 
 	deps.handler.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 
 	var resp map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&resp)
-	depth := int(resp["depth"].(float64))
-	if depth != 8 {
-		t.Errorf("depth should be clamped to 8, got %d", depth)
+	if resp["error"] == nil || resp["error"] == "" {
+		t.Error("expected error message in response body")
 	}
 }
 
@@ -779,6 +778,105 @@ func TestGraph_DefaultDepth_Is3(t *testing.T) {
 	depth := int(resp["depth"].(float64))
 	if depth != 3 {
 		t.Errorf("default depth should be 3, got %d", depth)
+	}
+}
+
+func TestGraph_Depth8_IsAllowed(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+	rootPersonID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          rootPersonID,
+		FamilyID:    familyID,
+		DisplayName: "Root Person",
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+rootPersonID.String()+"&depth=8", nil)
+	req.Header.Set("X-User-Id", adminID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for depth=8, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	depth := int(resp["depth"].(float64))
+	if depth != 8 {
+		t.Errorf("depth should be 8, got %d", depth)
+	}
+}
+
+func TestGraph_TruncatedWhenDepthLimitReached(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+
+	person1 := uuid.New()
+	person2 := uuid.New()
+	person3 := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          person1,
+		FamilyID:    familyID,
+		DisplayName: "Person 1",
+	})
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          person2,
+		FamilyID:    familyID,
+		DisplayName: "Person 2",
+	})
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          person3,
+		FamilyID:    familyID,
+		DisplayName: "Person 3",
+	})
+	deps.projectionStore.CreateRelationship(&projection.Relationship{
+		ID:       uuid.New(),
+		FamilyID: familyID,
+		ParentID: person2,
+		ChildID:  person1,
+		Subtype:  projection.SubtypeBiological,
+		Role:     projection.RoleFather,
+	})
+	deps.projectionStore.CreateRelationship(&projection.Relationship{
+		ID:       uuid.New(),
+		FamilyID: familyID,
+		ParentID: person3,
+		ChildID:  person2,
+		Subtype:  projection.SubtypeBiological,
+		Role:     projection.RoleFather,
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+person1.String()+"&depth=1", nil)
+	req.Header.Set("X-User-Id", adminID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	truncated := resp["truncated"].(bool)
+	if !truncated {
+		t.Error("expected truncated to be true when depth limit is reached")
+	}
+
+	truncateReason := resp["truncateReason"]
+	if truncateReason == nil || truncateReason == "" {
+		t.Error("expected truncateReason to be set when truncated is true")
 	}
 }
 

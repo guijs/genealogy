@@ -29,9 +29,6 @@ func (s *GraphService) GetGraph(req GetGraphRequest) (*projection.GraphProjectio
 	if depth <= 0 {
 		depth = DefaultDepth
 	}
-	if depth > MaxDepth {
-		depth = MaxDepth
-	}
 
 	root, ok := s.projectionStore.GetPerson(req.RootPersonID)
 	if !ok || root.FamilyID != req.FamilyID {
@@ -42,8 +39,9 @@ func (s *GraphService) GetGraph(req GetGraphRequest) (*projection.GraphProjectio
 	persons := make(map[uuid.UUID]*projection.Person)
 	marriages := make(map[uuid.UUID]*projection.Marriage)
 	relationships := make(map[uuid.UUID]*projection.Relationship)
+	truncated := false
 
-	s.traverse(req.RootPersonID, req.FamilyID, depth, 0, visited, persons, marriages, relationships)
+	s.traverse(req.RootPersonID, req.FamilyID, depth, 0, visited, persons, marriages, relationships, &truncated)
 
 	personDTOs := make([]projection.PersonDTO, 0)
 	for _, p := range persons {
@@ -102,8 +100,11 @@ func (s *GraphService) GetGraph(req GetGraphRequest) (*projection.GraphProjectio
 		})
 	}
 
-	truncated := false
 	var truncateReason *string
+	if truncated {
+		reason := "已达展开上限"
+		truncateReason = &reason
+	}
 
 	return &projection.GraphProjection{
 		FamilyID:       req.FamilyID.String(),
@@ -126,6 +127,7 @@ func (s *GraphService) traverse(
 	persons map[uuid.UUID]*projection.Person,
 	marriages map[uuid.UUID]*projection.Marriage,
 	relationships map[uuid.UUID]*projection.Relationship,
+	truncated *bool,
 ) {
 	if currentDepth > maxDepth {
 		return
@@ -169,7 +171,11 @@ func (s *GraphService) traverse(
 			continue
 		}
 		relationships[r.ID] = r
-		s.traverse(r.ParentID, familyID, maxDepth, currentDepth+1, visited, persons, marriages, relationships)
+		if currentDepth+1 > maxDepth && !visited[r.ParentID] {
+			*truncated = true
+		} else {
+			s.traverse(r.ParentID, familyID, maxDepth, currentDepth+1, visited, persons, marriages, relationships, truncated)
+		}
 	}
 
 	childRels := s.projectionStore.GetChildrenOf(personID)
@@ -178,6 +184,10 @@ func (s *GraphService) traverse(
 			continue
 		}
 		relationships[r.ID] = r
-		s.traverse(r.ChildID, familyID, maxDepth, currentDepth+1, visited, persons, marriages, relationships)
+		if currentDepth+1 > maxDepth && !visited[r.ChildID] {
+			*truncated = true
+		} else {
+			s.traverse(r.ChildID, familyID, maxDepth, currentDepth+1, visited, persons, marriages, relationships, truncated)
+		}
 	}
 }
