@@ -37,6 +37,10 @@ public class MediaService {
             return UploadUrlResult.error("invalid MIME type: only jpeg, png, webp allowed");
         }
 
+        if (fileSize <= 0) {
+            return UploadUrlResult.error("invalid file size: must be greater than 0");
+        }
+
         if (fileSize > MAX_MEDIA_SIZE) {
             return UploadUrlResult.error("file too large: maximum 5MB allowed");
         }
