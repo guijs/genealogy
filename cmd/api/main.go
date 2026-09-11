@@ -21,11 +21,14 @@ func main() {
 	membershipStore := family.NewInMemoryMembershipStore()
 	personStore := person.NewInMemoryStore()
 	kinshipStore := kinship.NewInMemoryStore()
+	objectStore := app.NewStubObjectStore()
 	relationshipService := app.NewRelationshipService(personStore, kinshipStore)
+	mediaService := app.NewMediaService(objectStore)
 
 	router := httpapi.NewRouter(httpapi.RouterDeps{
 		MembershipStore:     membershipStore,
 		RelationshipService: relationshipService,
+		MediaService:        mediaService,
 	})
 
 	log.Printf("Starting server on :%s", port)

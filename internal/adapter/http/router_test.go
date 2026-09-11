@@ -19,11 +19,14 @@ func setupTestRouter() (*httpapi.RouterDeps, *http.Handler) {
 	membershipStore := family.NewInMemoryMembershipStore()
 	personStore := person.NewInMemoryStore()
 	kinshipStore := kinship.NewInMemoryStore()
+	objectStore := app.NewStubObjectStore()
 	relationshipService := app.NewRelationshipService(personStore, kinshipStore)
+	mediaService := app.NewMediaService(objectStore)
 
 	deps := &httpapi.RouterDeps{
 		MembershipStore:     membershipStore,
 		RelationshipService: relationshipService,
+		MediaService:        mediaService,
 	}
 
 	router := httpapi.NewRouter(*deps)
@@ -201,11 +204,14 @@ func setupTestRouterWithStores() *testRouterDeps {
 	membershipStore := family.NewInMemoryMembershipStore()
 	personStore := person.NewInMemoryStore()
 	kinshipStore := kinship.NewInMemoryStore()
+	objectStore := app.NewStubObjectStore()
 	relationshipService := app.NewRelationshipService(personStore, kinshipStore)
+	mediaService := app.NewMediaService(objectStore)
 
 	router := httpapi.NewRouter(httpapi.RouterDeps{
 		MembershipStore:     membershipStore,
 		RelationshipService: relationshipService,
+		MediaService:        mediaService,
 	})
 
 	return &testRouterDeps{
@@ -355,5 +361,322 @@ func TestRelationships_PersonNotInFamily_Returns404(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404 when child not in family, got %d", w.Code)
+	}
+}
+
+// =============================================================================
+// B3: Role Matrix Tests
+// =============================================================================
+
+func TestRBAC_AdminCanRead(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String(), nil)
+	req.Header.Set("X-User-Id", adminID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("admin should read, expected 200, got %d", w.Code)
+	}
+}
+
+func TestRBAC_AdminCanWrite(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+	parentID := uuid.New()
+	childID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+	deps.personStore.Create(&person.Person{ID: parentID, FamilyID: familyID, FirstName: "Parent"})
+	deps.personStore.Create(&person.Person{ID: childID, FamilyID: familyID, FirstName: "Child"})
+
+	body := map[string]string{
+		"parent_id":         parentID.String(),
+		"child_id":          childID.String(),
+		"relationship_type": "biological_father",
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/v1/families/"+familyID.String()+"/relationships", bytes.NewReader(bodyBytes))
+	req.Header.Set("X-User-Id", adminID.String())
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("admin should write, expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRBAC_ViewerCanRead(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	viewerID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, viewerID, family.RoleViewer)
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String(), nil)
+	req.Header.Set("X-User-Id", viewerID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("viewer should read, expected 200, got %d", w.Code)
+	}
+}
+
+func TestRBAC_ViewerCannotWrite_Returns403(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	viewerID := uuid.New()
+	parentID := uuid.New()
+	childID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, viewerID, family.RoleViewer)
+	deps.personStore.Create(&person.Person{ID: parentID, FamilyID: familyID, FirstName: "Parent"})
+	deps.personStore.Create(&person.Person{ID: childID, FamilyID: familyID, FirstName: "Child"})
+
+	body := map[string]string{
+		"parent_id":         parentID.String(),
+		"child_id":          childID.String(),
+		"relationship_type": "biological_father",
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/v1/families/"+familyID.String()+"/relationships", bytes.NewReader(bodyBytes))
+	req.Header.Set("X-User-Id", viewerID.String())
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("viewer should not write, expected 403, got %d", w.Code)
+	}
+}
+
+func TestRBAC_NonMemberCannotRead_Returns404(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	nonMemberID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String(), nil)
+	req.Header.Set("X-User-Id", nonMemberID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("non-member should get 404, got %d", w.Code)
+	}
+}
+
+func TestRBAC_NonMemberCannotWrite_Returns404(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	nonMemberID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+
+	body := map[string]string{
+		"parent_id":         uuid.New().String(),
+		"child_id":          uuid.New().String(),
+		"relationship_type": "biological_father",
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/v1/families/"+familyID.String()+"/relationships", bytes.NewReader(bodyBytes))
+	req.Header.Set("X-User-Id", nonMemberID.String())
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("non-member write should get 404 (not 403), got %d", w.Code)
+	}
+}
+
+// =============================================================================
+// B4: Media Upload Safety Tests
+// =============================================================================
+
+func TestMediaUpload_HappyPath(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+
+	body := map[string]interface{}{
+		"mime_type": "image/jpeg",
+		"file_size": 1024,
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/v1/families/"+familyID.String()+"/media/upload-url", bytes.NewReader(bodyBytes))
+	req.Header.Set("X-User-Id", adminID.String())
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["upload_url"] == "" {
+		t.Error("expected upload_url in response")
+	}
+	if resp["storage_key"] == "" {
+		t.Error("expected storage_key in response")
+	}
+}
+
+func TestMediaUpload_BadMIME_Returns400(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+
+	body := map[string]interface{}{
+		"mime_type": "application/pdf",
+		"file_size": 1024,
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/v1/families/"+familyID.String()+"/media/upload-url", bytes.NewReader(bodyBytes))
+	req.Header.Set("X-User-Id", adminID.String())
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("bad MIME should return 400, got %d", w.Code)
+	}
+}
+
+func TestMediaUpload_Oversized_Returns400(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+
+	body := map[string]interface{}{
+		"mime_type": "image/jpeg",
+		"file_size": 10 * 1024 * 1024, // 10MB > 5MB limit
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/v1/families/"+familyID.String()+"/media/upload-url", bytes.NewReader(bodyBytes))
+	req.Header.Set("X-User-Id", adminID.String())
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("oversized file should return 400, got %d", w.Code)
+	}
+}
+
+func TestMediaUpload_ClientKey_Returns400(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+
+	body := map[string]interface{}{
+		"mime_type":   "image/jpeg",
+		"file_size":   1024,
+		"storage_key": "malicious/path/to/overwrite.jpg",
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/v1/families/"+familyID.String()+"/media/upload-url", bytes.NewReader(bodyBytes))
+	req.Header.Set("X-User-Id", adminID.String())
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("client-supplied key should return 400, got %d", w.Code)
+	}
+}
+
+func TestMediaUpload_NonMember_Returns404(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	nonMemberID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+
+	body := map[string]interface{}{
+		"mime_type": "image/jpeg",
+		"file_size": 1024,
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/v1/families/"+familyID.String()+"/media/upload-url", bytes.NewReader(bodyBytes))
+	req.Header.Set("X-User-Id", nonMemberID.String())
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("non-member should get 404, got %d", w.Code)
+	}
+}
+
+func TestMediaUpload_ViewerCannotUpload_Returns403(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	viewerID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, viewerID, family.RoleViewer)
+
+	body := map[string]interface{}{
+		"mime_type": "image/jpeg",
+		"file_size": 1024,
+	}
+	bodyBytes, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/v1/families/"+familyID.String()+"/media/upload-url", bytes.NewReader(bodyBytes))
+	req.Header.Set("X-User-Id", viewerID.String())
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("viewer should get 403 for upload, got %d", w.Code)
 	}
 }

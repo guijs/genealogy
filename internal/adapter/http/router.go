@@ -10,8 +10,9 @@ import (
 )
 
 type RouterDeps struct {
-	MembershipStore    family.MembershipStore
+	MembershipStore     family.MembershipStore
 	RelationshipService *app.RelationshipService
+	MediaService        *app.MediaService
 }
 
 func NewRouter(deps RouterDeps) *chi.Mux {
@@ -26,6 +27,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	familyMiddleware := NewFamilyMiddleware(deps.MembershipStore)
 	familyHandlers := NewFamilyHandlers(deps.MembershipStore)
 	relationshipHandlers := NewRelationshipHandlers(deps.RelationshipService)
+	mediaHandlers := NewMediaHandlers(deps.MediaService)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/families/{familyId}", func(r chi.Router) {
@@ -34,7 +36,12 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 
 			r.Get("/", familyHandlers.GetFamily)
 			r.Get("/persons", familyHandlers.ListPersons)
-			r.Post("/relationships", relationshipHandlers.AddRelationship)
+
+			r.Group(func(r chi.Router) {
+				r.Use(familyMiddleware.RequireWriteAccess)
+				r.Post("/relationships", relationshipHandlers.AddRelationship)
+				r.Post("/media/upload-url", mediaHandlers.GetUploadURL)
+			})
 		})
 	})
 
