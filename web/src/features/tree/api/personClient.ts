@@ -30,13 +30,14 @@ export interface PersonResponse {
 }
 
 export class PersonApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly code?: string,
-  ) {
+  readonly status: number
+  readonly code?: string
+
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'PersonApiError'
+    this.status = status
+    this.code = code
   }
 
   static fromStatus(status: number, url: string): PersonApiError {

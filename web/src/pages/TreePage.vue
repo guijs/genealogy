@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useRouter } from 'vue-router'
 import TreeCanvas from '../features/tree/canvas/TreeCanvas.vue'
 import PersonDetailDrawer from '../features/tree/panels/PersonDetailDrawer.vue'
 import { useTreeViewStore } from '../features/tree/state/treeViewStore'
 
+const router = useRouter()
 const store = useTreeViewStore()
 const {
   loading,
@@ -63,6 +65,10 @@ async function handleAddPerson() {
 
 function handleCancelAdd() {
   store.closeAddForm()
+}
+
+function goToCreateFamily() {
+  router.push({ name: 'createFamily' })
 }
 
 watch(addSpouseFormOpen, (open) => {
@@ -133,6 +139,13 @@ function handleCancelEndMarriage() {
         </p>
       </div>
       <div class="topbar-right">
+        <button
+          type="button"
+          class="btn-create-family"
+          @click="goToCreateFamily"
+        >
+          创建家族
+        </button>
         <button
           v-if="usingGraphApi"
           type="button"
@@ -349,7 +362,8 @@ function handleCancelEndMarriage() {
   align-items: flex-end;
   gap: 16px;
 }
-.btn-add {
+.btn-add,
+.btn-create-family {
   padding: 6px 14px;
   border: 1px solid var(--color-accent, #2f5d50);
   border-radius: 6px;
@@ -360,7 +374,12 @@ function handleCancelEndMarriage() {
   cursor: pointer;
   white-space: nowrap;
 }
-.btn-add:hover {
+.btn-create-family {
+  background: #fff;
+  color: var(--color-accent, #2f5d50);
+}
+.btn-add:hover,
+.btn-create-family:hover {
   opacity: 0.9;
 }
 .topbar h1 {
