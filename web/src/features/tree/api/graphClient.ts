@@ -21,6 +21,7 @@ import type {
   AddRelationshipRequest,
   AddRelationshipResponse,
   GraphProjection,
+  RelationshipType,
 } from './types'
 
 export interface FetchFamilyGraphParams {
@@ -118,7 +119,8 @@ export interface AddRelationshipParams {
   familyId: string
   parentId: string
   childId: string
-  relationshipType: 'biological' | 'adoptive'
+  /** Java RelationType.fromString 格式：biological_father | biological_mother | adoptive_father | adoptive_mother */
+  relationshipType: RelationshipType
 }
 
 /**
@@ -127,6 +129,9 @@ export interface AddRelationshipParams {
  * POST /api/v1/families/{familyId}/relationships
  * Body: { parent_id, child_id, relationship_type } (snake_case)
  * Header: X-User-Id
+ *
+ * relationship_type 必须为 Java RelationType.fromString 支持的值：
+ *   biological_father | biological_mother | adoptive_father | adoptive_mother
  *
  * 仅在使用真 API 时可用。调用后需 reloadGraph 刷新投影。
  * @throws Error 若未开启真 API 或请求失败
