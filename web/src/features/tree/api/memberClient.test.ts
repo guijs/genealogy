@@ -20,10 +20,30 @@ describe('MemberApiError', () => {
     expect(err.message).toBe('需要管理员权限')
   })
 
-  it('fromStatus maps 409 to already member message', () => {
+  it('fromStatus maps 409 to already member message for add context', () => {
+    const err = MemberApiError.fromStatus(409, '/test', 'add')
+    expect(err.status).toBe(409)
+    expect(err.message).toBe('该用户已是家族成员')
+  })
+
+  it('fromStatus maps 409 to already member message without context', () => {
     const err = MemberApiError.fromStatus(409, '/test')
     expect(err.status).toBe(409)
     expect(err.message).toBe('该用户已是家族成员')
+  })
+
+  it('fromStatus maps 409 to last admin message for updateRole context', () => {
+    const err = MemberApiError.fromStatus(409, '/test', 'updateRole')
+    expect(err.status).toBe(409)
+    expect(err.message).toBe('不能移除或降级最后一个管理员')
+    expect(err.code).toBe('LAST_ADMIN')
+  })
+
+  it('fromStatus maps 409 to last admin message for remove context', () => {
+    const err = MemberApiError.fromStatus(409, '/test', 'remove')
+    expect(err.status).toBe(409)
+    expect(err.message).toBe('不能移除或降级最后一个管理员')
+    expect(err.code).toBe('LAST_ADMIN')
   })
 
   it('fromStatus maps unknown status to generic message', () => {
@@ -88,5 +108,59 @@ describe('memberClient API functions', () => {
     const { addMember } = await import('./memberClient')
     await expect(addMember('', { user_id: 'test-user', role: 'viewer' }))
       .rejects.toThrow('familyId 不能为空')
+  })
+
+  it('updateMemberRole throws on mock mode', async () => {
+    import.meta.env.VITE_USE_GRAPH_API = 'false'
+    import.meta.env.VITE_GRAPH_API_BASE = ''
+
+    const { updateMemberRole } = await import('./memberClient')
+    await expect(updateMemberRole('test-family-id', 'test-user-id', 'editor'))
+      .rejects.toThrow('mock 模式')
+  })
+
+  it('updateMemberRole throws on empty familyId', async () => {
+    import.meta.env.VITE_USE_GRAPH_API = 'true'
+    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
+
+    const { updateMemberRole } = await import('./memberClient')
+    await expect(updateMemberRole('', 'test-user', 'editor'))
+      .rejects.toThrow('familyId 不能为空')
+  })
+
+  it('updateMemberRole throws on empty userId', async () => {
+    import.meta.env.VITE_USE_GRAPH_API = 'true'
+    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
+
+    const { updateMemberRole } = await import('./memberClient')
+    await expect(updateMemberRole('test-family-id', '', 'editor'))
+      .rejects.toThrow('userId 不能为空')
+  })
+
+  it('removeMember throws on mock mode', async () => {
+    import.meta.env.VITE_USE_GRAPH_API = 'false'
+    import.meta.env.VITE_GRAPH_API_BASE = ''
+
+    const { removeMember } = await import('./memberClient')
+    await expect(removeMember('test-family-id', 'test-user-id'))
+      .rejects.toThrow('mock 模式')
+  })
+
+  it('removeMember throws on empty familyId', async () => {
+    import.meta.env.VITE_USE_GRAPH_API = 'true'
+    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
+
+    const { removeMember } = await import('./memberClient')
+    await expect(removeMember('', 'test-user'))
+      .rejects.toThrow('familyId 不能为空')
+  })
+
+  it('removeMember throws on empty userId', async () => {
+    import.meta.env.VITE_USE_GRAPH_API = 'true'
+    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
+
+    const { removeMember } = await import('./memberClient')
+    await expect(removeMember('test-family-id', ''))
+      .rejects.toThrow('userId 不能为空')
   })
 })
