@@ -13,6 +13,7 @@ type RouterDeps struct {
 	MembershipStore     family.MembershipStore
 	RelationshipService *app.RelationshipService
 	MediaService        *app.MediaService
+	GraphService        *app.GraphService
 }
 
 func NewRouter(deps RouterDeps) *chi.Mux {
@@ -28,6 +29,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	familyHandlers := NewFamilyHandlers(deps.MembershipStore)
 	relationshipHandlers := NewRelationshipHandlers(deps.RelationshipService)
 	mediaHandlers := NewMediaHandlers(deps.MediaService)
+	graphHandlers := NewGraphHandlers(deps.GraphService)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/families/{familyId}", func(r chi.Router) {
@@ -36,6 +38,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 
 			r.Get("/", familyHandlers.GetFamily)
 			r.Get("/persons", familyHandlers.ListPersons)
+			r.Get("/graph", graphHandlers.GetGraph)
 
 			r.Group(func(r chi.Router) {
 				r.Use(familyMiddleware.RequireWriteAccess)

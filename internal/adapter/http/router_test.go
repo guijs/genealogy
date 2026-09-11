@@ -13,20 +13,24 @@ import (
 	"github.com/guijs/genealogy/internal/domain/family"
 	"github.com/guijs/genealogy/internal/domain/kinship"
 	"github.com/guijs/genealogy/internal/domain/person"
+	"github.com/guijs/genealogy/internal/domain/projection"
 )
 
 func setupTestRouter() (*httpapi.RouterDeps, *http.Handler) {
 	membershipStore := family.NewInMemoryMembershipStore()
 	personStore := person.NewInMemoryStore()
 	kinshipStore := kinship.NewInMemoryStore()
+	projectionStore := projection.NewInMemoryStore()
 	objectStore := app.NewStubObjectStore()
 	relationshipService := app.NewRelationshipService(personStore, kinshipStore)
 	mediaService := app.NewMediaService(objectStore)
+	graphService := app.NewGraphService(projectionStore)
 
 	deps := &httpapi.RouterDeps{
 		MembershipStore:     membershipStore,
 		RelationshipService: relationshipService,
 		MediaService:        mediaService,
+		GraphService:        graphService,
 	}
 
 	router := httpapi.NewRouter(*deps)
@@ -197,6 +201,7 @@ type testRouterDeps struct {
 	membershipStore *family.InMemoryMembershipStore
 	personStore     *person.InMemoryStore
 	kinshipStore    *kinship.InMemoryStore
+	projectionStore *projection.InMemoryStore
 	handler         http.Handler
 }
 
@@ -204,20 +209,24 @@ func setupTestRouterWithStores() *testRouterDeps {
 	membershipStore := family.NewInMemoryMembershipStore()
 	personStore := person.NewInMemoryStore()
 	kinshipStore := kinship.NewInMemoryStore()
+	projectionStore := projection.NewInMemoryStore()
 	objectStore := app.NewStubObjectStore()
 	relationshipService := app.NewRelationshipService(personStore, kinshipStore)
 	mediaService := app.NewMediaService(objectStore)
+	graphService := app.NewGraphService(projectionStore)
 
 	router := httpapi.NewRouter(httpapi.RouterDeps{
 		MembershipStore:     membershipStore,
 		RelationshipService: relationshipService,
 		MediaService:        mediaService,
+		GraphService:        graphService,
 	})
 
 	return &testRouterDeps{
 		membershipStore: membershipStore,
 		personStore:     personStore,
 		kinshipStore:    kinshipStore,
+		projectionStore: projectionStore,
 		handler:         router,
 	}
 }
@@ -678,5 +687,273 @@ func TestMediaUpload_ViewerCannotUpload_Returns403(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Errorf("viewer should get 403 for upload, got %d", w.Code)
+	}
+}
+
+// =============================================================================
+// Graph Endpoint Tests
+// =============================================================================
+
+func TestGraph_NonMember_Returns404(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	nonMemberID := uuid.New()
+	rootPersonID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          rootPersonID,
+		FamilyID:    familyID,
+		DisplayName: "Root Person",
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+rootPersonID.String(), nil)
+	req.Header.Set("X-User-Id", nonMemberID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("non-member should get 404, got %d", w.Code)
+	}
+}
+
+func TestGraph_DepthClamp_MaxIs8(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+	rootPersonID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          rootPersonID,
+		FamilyID:    familyID,
+		DisplayName: "Root Person",
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+rootPersonID.String()+"&depth=20", nil)
+	req.Header.Set("X-User-Id", adminID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	depth := int(resp["depth"].(float64))
+	if depth != 8 {
+		t.Errorf("depth should be clamped to 8, got %d", depth)
+	}
+}
+
+func TestGraph_DefaultDepth_Is3(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+	rootPersonID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          rootPersonID,
+		FamilyID:    familyID,
+		DisplayName: "Root Person",
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+rootPersonID.String(), nil)
+	req.Header.Set("X-User-Id", adminID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	depth := int(resp["depth"].(float64))
+	if depth != 3 {
+		t.Errorf("default depth should be 3, got %d", depth)
+	}
+}
+
+func TestGraph_IncludesEndedMarriage(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+	person1ID := uuid.New()
+	person2ID := uuid.New()
+	marriageID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          person1ID,
+		FamilyID:    familyID,
+		DisplayName: "Person 1",
+	})
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          person2ID,
+		FamilyID:    familyID,
+		DisplayName: "Person 2",
+	})
+	reason := "irreconcilable differences"
+	deps.projectionStore.CreateMarriage(&projection.Marriage{
+		ID:          marriageID,
+		FamilyID:    familyID,
+		Partner1ID:  person1ID,
+		Partner2ID:  person2ID,
+		Status:      projection.MarriageDivorced,
+		EndedReason: &reason,
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+person1ID.String(), nil)
+	req.Header.Set("X-User-Id", adminID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	marriages := resp["marriages"].([]interface{})
+	if len(marriages) != 1 {
+		t.Fatalf("expected 1 marriage (ended), got %d", len(marriages))
+	}
+
+	marriage := marriages[0].(map[string]interface{})
+	if marriage["status"] != "divorced" {
+		t.Errorf("expected status 'divorced', got %v", marriage["status"])
+	}
+	if marriage["endedReason"] != "irreconcilable differences" {
+		t.Errorf("expected endedReason, got %v", marriage["endedReason"])
+	}
+}
+
+func TestGraph_ExcludesDissolvedRelationship(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+	parentID := uuid.New()
+	childID := uuid.New()
+	relationshipID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          parentID,
+		FamilyID:    familyID,
+		DisplayName: "Parent",
+	})
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          childID,
+		FamilyID:    familyID,
+		DisplayName: "Child",
+	})
+	deps.projectionStore.CreateRelationship(&projection.Relationship{
+		ID:        relationshipID,
+		FamilyID:  familyID,
+		ParentID:  parentID,
+		ChildID:   childID,
+		Subtype:   projection.SubtypeBiological,
+		Role:      projection.RoleFather,
+		Dissolved: true,
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+parentID.String(), nil)
+	req.Header.Set("X-User-Id", adminID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	relationships := resp["relationships"].([]interface{})
+	if len(relationships) != 0 {
+		t.Errorf("dissolved relationship should be excluded, got %d relationships", len(relationships))
+	}
+}
+
+func TestGraph_ExcludesHiddenPerson(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	adminID := uuid.New()
+	visibleID := uuid.New()
+	hiddenID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          visibleID,
+		FamilyID:    familyID,
+		DisplayName: "Visible Person",
+		Hidden:      false,
+	})
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          hiddenID,
+		FamilyID:    familyID,
+		DisplayName: "Hidden Person",
+		Hidden:      true,
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+visibleID.String(), nil)
+	req.Header.Set("X-User-Id", adminID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	persons := resp["persons"].([]interface{})
+	for _, p := range persons {
+		person := p.(map[string]interface{})
+		if person["displayName"] == "Hidden Person" {
+			t.Error("hidden person should be excluded from graph")
+		}
+	}
+}
+
+func TestGraph_RootPersonNotInFamily_Returns404(t *testing.T) {
+	deps := setupTestRouterWithStores()
+	familyID := uuid.New()
+	otherFamilyID := uuid.New()
+	adminID := uuid.New()
+	rootPersonID := uuid.New()
+
+	deps.membershipStore.CreateFamily(familyID, "Test Family")
+	deps.membershipStore.AddMemberWithRole(familyID, adminID, family.RoleAdmin)
+	deps.projectionStore.CreatePerson(&projection.Person{
+		ID:          rootPersonID,
+		FamilyID:    otherFamilyID,
+		DisplayName: "Other Family Person",
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/families/"+familyID.String()+"/graph?rootPersonId="+rootPersonID.String(), nil)
+	req.Header.Set("X-User-Id", adminID.String())
+	w := httptest.NewRecorder()
+
+	deps.handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for root person in different family, got %d", w.Code)
 	}
 }
