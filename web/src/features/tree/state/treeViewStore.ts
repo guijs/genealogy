@@ -12,7 +12,10 @@ import {
   createPerson as apiCreatePerson,
   updatePerson as apiUpdatePerson,
   listPersons as apiListPersons,
+  hidePerson as apiHidePerson,
+  restorePerson as apiRestorePerson,
   PersonApiError,
+  HidePersonConflictError,
   type CreatePersonRequest,
   type UpdatePersonRequest,
 } from '../api/personClient'
@@ -55,6 +58,18 @@ export const useTreeViewStore = defineStore('treeView', () => {
   const endMarriageId = ref<string | null>(null)
   /** 空家族状态（新家族无成员时） */
   const emptyFamily = ref(false)
+  /** 隐藏成员确认弹窗显示（用于处理 409 活跃婚姻冲突） */
+  const hideConfirmOpen = ref(false)
+  /** 待确认隐藏的成员 ID */
+  const hideConfirmPersonId = ref<string | null>(null)
+  /** 隐藏确认弹窗的消息 */
+  const hideConfirmMessage = ref<string>('')
+  /** 当前选中的人物是否已隐藏（用于 drawer 显示 restore 按钮） */
+  const selectedPersonHidden = ref(false)
+  /** 已隐藏人物的缓存数据（当人物从 graph 消失后仍需在 drawer 显示） */
+  const hiddenPersonCache = ref<PersonDTO | null>(null)
+  /** 持久化的已隐藏人物列表，按 familyId 存储 {id, displayName} */
+  const hiddenPersonsMap = ref<Record<string, Array<{ id: string; displayName: string }>>>({})
 
   const layout = computed(() => {
     if (!graph.value) return null
@@ -66,7 +81,11 @@ export const useTreeViewStore = defineStore('treeView', () => {
   })
 
   const selectedPerson = computed<PersonDTO | null>(() => {
-    if (!graph.value || !selectedPersonId.value) return null
+    if (!selectedPersonId.value) return null
+    if (selectedPersonHidden.value && hiddenPersonCache.value) {
+      return hiddenPersonCache.value
+    }
+    if (!graph.value) return null
     return (
       graph.value.persons.find((p) => p.id === selectedPersonId.value) ?? null
     )
@@ -83,6 +102,11 @@ export const useTreeViewStore = defineStore('treeView', () => {
   const truncateReason = computed(
     () => graph.value?.truncateReason ?? '已达展开上限',
   )
+
+  /** 当前家族的已隐藏人员列表 */
+  const hiddenPersonsForCurrentFamily = computed(() => {
+    return hiddenPersonsMap.value[currentFamilyId.value] ?? []
+  })
 
   /**
    * 加载演示家族图。走 fetchFamilyGraph（默认 fixture；env 可切真 API）。
@@ -152,6 +176,8 @@ export const useTreeViewStore = defineStore('treeView', () => {
       })
       focusPersonId.value = graph.value.rootPersonId
       zoom.value = 1
+      
+      void refreshHiddenPersons()
     } finally {
       loading.value = false
     }
@@ -306,6 +332,154 @@ export const useTreeViewStore = defineStore('treeView', () => {
     }
   }
 
+  /**
+   * 隐藏成员（Phase2-C）
+   * 成功后自动 reloadGraph；若有活跃婚姻需用户确认
+   * @param personId 要隐藏的成员 ID
+   * @param confirmActiveUnion 是否确认隐藏有活跃婚姻的成员
+   */
+  async function hidePerson(
+    personId: string,
+    confirmActiveUnion = false,
+  ): Promise<boolean> {
+    if (!usingGraphApi.value) {
+      showError('隐藏成员需要连接真实 API（当前为 mock 模式）')
+      return false
+    }
+    clearMessages()
+    submitting.value = true
+
+    const personToCache = graph.value?.persons.find((p) => p.id === personId)
+
+    try {
+      await apiHidePerson(currentFamilyId.value, personId, confirmActiveUnion)
+      showSuccess('成员已隐藏，可点击「恢复」重新显示')
+      hideConfirmOpen.value = false
+      hideConfirmPersonId.value = null
+      hideConfirmMessage.value = ''
+
+      if (personToCache) {
+        hiddenPersonCache.value = personToCache
+        selectedPersonHidden.value = true
+        
+        const familyId = currentFamilyId.value
+        if (!hiddenPersonsMap.value[familyId]) {
+          hiddenPersonsMap.value[familyId] = []
+        }
+        const existing = hiddenPersonsMap.value[familyId].find(p => p.id === personId)
+        if (!existing) {
+          hiddenPersonsMap.value[familyId].push({
+            id: personToCache.id,
+            displayName: personToCache.displayName,
+          })
+        }
+      }
+
+      await reloadGraph()
+      return true
+    } catch (e) {
+      if (e instanceof HidePersonConflictError) {
+        hideConfirmPersonId.value = personId
+        hideConfirmMessage.value = e.message
+        hideConfirmOpen.value = true
+        return false
+      }
+      const msg = e instanceof PersonApiError ? e.message : '隐藏成员失败'
+      showError(msg)
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  /**
+   * 确认隐藏有活跃婚姻的成员
+   */
+  async function confirmHidePerson(): Promise<boolean> {
+    if (!hideConfirmPersonId.value) return false
+    return hidePerson(hideConfirmPersonId.value, true)
+  }
+
+  /**
+   * 取消隐藏确认
+   */
+  function cancelHideConfirm() {
+    hideConfirmOpen.value = false
+    hideConfirmPersonId.value = null
+    hideConfirmMessage.value = ''
+  }
+
+  /**
+   * 恢复已隐藏的成员（Phase2-C）
+   * 成功后自动 reloadGraph
+   * @param personId 要恢复的成员 ID
+   */
+  async function restorePerson(personId: string): Promise<boolean> {
+    if (!usingGraphApi.value) {
+      showError('恢复成员需要连接真实 API（当前为 mock 模式）')
+      return false
+    }
+    clearMessages()
+    submitting.value = true
+    try {
+      await apiRestorePerson(currentFamilyId.value, personId)
+      showSuccess('成员已恢复')
+      selectedPersonHidden.value = false
+      hiddenPersonCache.value = null
+      
+      const familyId = currentFamilyId.value
+      if (hiddenPersonsMap.value[familyId]) {
+        hiddenPersonsMap.value[familyId] = hiddenPersonsMap.value[familyId].filter(
+          p => p.id !== personId
+        )
+      }
+      
+      await reloadGraph()
+      return true
+    } catch (e) {
+      const msg = e instanceof PersonApiError ? e.message : '恢复成员失败'
+      showError(msg)
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  /**
+   * 从隐藏列表面板恢复成员（不通过 drawer）
+   * 成功后刷新隐藏列表和家族图
+   * @param personId 要恢复的成员 ID
+   */
+  async function restorePersonFromPanel(personId: string): Promise<boolean> {
+    if (!usingGraphApi.value) {
+      showError('恢复成员需要连接真实 API（当前为 mock 模式）')
+      return false
+    }
+    clearMessages()
+    submitting.value = true
+    try {
+      await apiRestorePerson(currentFamilyId.value, personId)
+      showSuccess('成员已恢复')
+      
+      const familyId = currentFamilyId.value
+      if (hiddenPersonsMap.value[familyId]) {
+        hiddenPersonsMap.value[familyId] = hiddenPersonsMap.value[familyId].filter(
+          p => p.id !== personId
+        )
+      }
+      
+      await reloadGraph()
+      await loadFamily(familyId)
+      return true
+    } catch (e) {
+      const msg = e instanceof PersonApiError ? e.message : '恢复成员失败'
+      showError(msg)
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
   function openAddSpouseForm() {
     addSpouseFormOpen.value = true
   }
@@ -343,14 +517,43 @@ export const useTreeViewStore = defineStore('treeView', () => {
   function selectPerson(personId: string) {
     selectedPersonId.value = personId
     drawerOpen.value = true
+    selectedPersonHidden.value = false
+    hiddenPersonCache.value = null
   }
 
   function closeDrawer() {
     drawerOpen.value = false
+    selectedPersonHidden.value = false
+    hiddenPersonCache.value = null
   }
 
   function setFocus(personId: string) {
     focusPersonId.value = personId
+  }
+
+  /**
+   * 启发式刷新隐藏人员列表
+   * 逻辑：listPersons(familyId) \ graph.persons
+   * 即：完整人员列表减去当前 graph 中可见的人员 = 隐藏的人员
+   */
+  async function refreshHiddenPersons(): Promise<void> {
+    if (!usingGraphApi.value || !currentFamilyId.value) return
+    
+    try {
+      const { persons: allPersons } = await apiListPersons(currentFamilyId.value)
+      const visibleIds = new Set(graph.value?.persons.map(p => p.id) ?? [])
+      
+      const hiddenPersons = allPersons
+        .filter(p => !visibleIds.has(p.id))
+        .map(p => ({
+          id: p.id,
+          displayName: `${p.last_name}${p.first_name}`,
+        }))
+      
+      hiddenPersonsMap.value[currentFamilyId.value] = hiddenPersons
+    } catch (e) {
+      console.warn('Failed to refresh hidden persons:', e)
+    }
   }
 
   /**
@@ -412,6 +615,11 @@ export const useTreeViewStore = defineStore('treeView', () => {
     endMarriageFormOpen,
     endMarriageId,
     emptyFamily,
+    hideConfirmOpen,
+    hideConfirmPersonId,
+    hideConfirmMessage,
+    selectedPersonHidden,
+    hiddenPersonsForCurrentFamily,
     layout,
     selectedPerson,
     selectedKin,
@@ -428,6 +636,12 @@ export const useTreeViewStore = defineStore('treeView', () => {
     updatePerson,
     addSpouse,
     endMarriage,
+    hidePerson,
+    confirmHidePerson,
+    cancelHideConfirm,
+    restorePerson,
+    restorePersonFromPanel,
+    refreshHiddenPersons,
     openAddForm,
     closeAddForm,
     openAddSpouseForm,

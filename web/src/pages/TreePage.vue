@@ -24,7 +24,20 @@ const {
   submitting,
   errorMessage,
   successMessage,
+  hideConfirmOpen,
+  hideConfirmMessage,
+  hiddenPersonsForCurrentFamily,
 } = storeToRefs(store)
+
+const hiddenPanelOpen = ref(false)
+
+function toggleHiddenPanel() {
+  hiddenPanelOpen.value = !hiddenPanelOpen.value
+}
+
+async function handleRestoreFromPanel(personId: string) {
+  await store.restorePersonFromPanel(personId)
+}
 
 const addFirstName = ref('')
 const addLastName = ref('')
@@ -164,6 +177,14 @@ async function handleEndMarriage() {
 function handleCancelEndMarriage() {
   store.closeEndMarriageForm()
 }
+
+async function handleConfirmHide() {
+  await store.confirmHidePerson()
+}
+
+function handleCancelHideConfirm() {
+  store.cancelHideConfirm()
+}
 </script>
 
 <template>
@@ -205,6 +226,14 @@ function handleCancelEndMarriage() {
           @click="goToMediaUpload"
         >
           媒体上传
+        </button>
+        <button
+          v-if="usingGraphApi && hiddenPersonsForCurrentFamily.length > 0"
+          type="button"
+          class="btn-hidden-list"
+          @click="toggleHiddenPanel"
+        >
+          已隐藏 ({{ hiddenPersonsForCurrentFamily.length }})
         </button>
         <button
           v-if="usingGraphApi"
@@ -391,6 +420,37 @@ function handleCancelEndMarriage() {
       </div>
     </div>
 
+    <!-- 隐藏成员确认（活跃婚姻冲突 409） -->
+    <div v-if="hideConfirmOpen" class="modal-overlay" @click.self="handleCancelHideConfirm">
+      <div class="modal-box">
+        <h2 class="modal-title">确认隐藏</h2>
+        <p class="modal-desc modal-warn">
+          {{ hideConfirmMessage }}
+        </p>
+        <p class="modal-hint">
+          隐藏此成员后，其相关的婚姻关系也将从家族树中消失。确定要继续吗？
+        </p>
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-submit btn-danger"
+            :disabled="submitting"
+            @click="handleConfirmHide"
+          >
+            {{ submitting ? '处理中…' : '确认隐藏' }}
+          </button>
+          <button
+            type="button"
+            class="btn-close"
+            :disabled="submitting"
+            @click="handleCancelHideConfirm"
+          >
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="stage">
       <p v-if="loading" class="loading">加载投影…</p>
       <div v-else-if="emptyFamily" class="empty-state">
@@ -407,6 +467,40 @@ function handleCancelEndMarriage() {
       </div>
       <TreeCanvas v-else />
       <PersonDetailDrawer />
+
+      <!-- 已隐藏成员面板 -->
+      <aside
+        v-if="hiddenPanelOpen && hiddenPersonsForCurrentFamily.length > 0"
+        class="hidden-panel"
+        aria-label="已隐藏成员"
+      >
+        <header class="hidden-panel-head">
+          <h3 class="hidden-panel-title">已隐藏</h3>
+          <button type="button" class="hidden-panel-close" @click="toggleHiddenPanel">
+            ✕
+          </button>
+        </header>
+        <p class="hidden-panel-desc">
+          以下成员已从家族树隐藏，点击「恢复」可重新显示。
+        </p>
+        <ul class="hidden-list">
+          <li
+            v-for="person in hiddenPersonsForCurrentFamily"
+            :key="person.id"
+            class="hidden-item"
+          >
+            <span class="hidden-name">{{ person.displayName }}</span>
+            <button
+              type="button"
+              class="btn-restore-small"
+              :disabled="submitting"
+              @click="handleRestoreFromPanel(person.id)"
+            >
+              {{ submitting ? '…' : '恢复' }}
+            </button>
+          </li>
+        </ul>
+      </aside>
     </div>
   </div>
 </template>
@@ -632,6 +726,17 @@ function handleCancelEndMarriage() {
   font-size: 14px;
   color: #555;
 }
+.modal-desc.modal-warn {
+  padding: 12px;
+  background: #fff4e5;
+  border-radius: 6px;
+  color: #8a6d3b;
+}
+.modal-hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #666;
+}
 .btn-danger {
   background: #c53030;
 }
@@ -671,5 +776,109 @@ function handleCancelEndMarriage() {
 }
 .btn-add-first:hover {
   opacity: 0.9;
+}
+/* 已隐藏成员按钮 */
+.btn-hidden-list {
+  padding: 6px 14px;
+  border: 1px solid #8a6d3b;
+  border-radius: 6px;
+  background: #fff4e5;
+  color: #8a6d3b;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-hidden-list:hover {
+  background: #ffeccc;
+}
+/* 已隐藏成员面板 */
+.hidden-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: min(300px, 100%);
+  max-height: 100%;
+  background: var(--color-card, #fff);
+  border-right: 1px solid var(--color-border, #d8d4cc);
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.06);
+  padding: 16px;
+  overflow: auto;
+  z-index: 15;
+  box-sizing: border-box;
+}
+.hidden-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.hidden-panel-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #8a6d3b;
+}
+.hidden-panel-close {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  cursor: pointer;
+  color: #666;
+  padding: 4px 8px;
+}
+.hidden-panel-close:hover {
+  color: #333;
+}
+.hidden-panel-desc {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #666;
+}
+.hidden-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.hidden-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #faf9f7;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.hidden-item:last-child {
+  margin-bottom: 0;
+}
+.hidden-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn-restore-small {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  background: var(--color-accent, #2f5d50);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.btn-restore-small:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.btn-restore-small:disabled {
+  background: #ccc;
+  cursor: not-allowed;
 }
 </style>

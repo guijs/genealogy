@@ -11,6 +11,7 @@ const {
   usingGraphApi,
   editMode,
   submitting,
+  selectedPersonHidden,
 } = storeToRefs(store)
 
 const editFirstName = ref('')
@@ -56,15 +57,28 @@ const roleLabel: Record<string, string> = {
   mother: '母',
   parent: '亲',
 }
+
+async function handleHide() {
+  if (!selectedPerson.value) return
+  await store.hidePerson(selectedPerson.value.id)
+}
+
+async function handleRestore() {
+  if (!selectedPerson.value) return
+  await store.restorePerson(selectedPerson.value.id)
+}
 </script>
 
 <template>
   <aside v-if="drawerOpen && selectedPerson" class="drawer" aria-label="人物详情">
     <header class="drawer-head">
-      <h2 class="detail-name">{{ selectedPerson.displayName }}</h2>
+      <div class="head-title">
+        <h2 class="detail-name">{{ selectedPerson.displayName }}</h2>
+        <span v-if="selectedPersonHidden" class="hidden-badge">已隐藏</span>
+      </div>
       <div class="head-actions">
         <button
-          v-if="!editMode && usingGraphApi"
+          v-if="!editMode && usingGraphApi && !selectedPersonHidden"
           type="button"
           class="btn-edit"
           @click="store.startEdit()"
@@ -206,6 +220,32 @@ const roleLabel: Record<string, string> = {
         </li>
       </ul>
       <p v-else class="empty">暂无</p>
+    </section>
+
+    <!-- 隐藏/恢复操作 -->
+    <section v-if="usingGraphApi && !editMode" class="section section-actions">
+      <div v-if="selectedPersonHidden" class="hidden-notice">
+        <p class="hidden-text">此成员已从家族树隐藏，不会显示在图谱中。</p>
+        <button
+          type="button"
+          class="btn-restore"
+          :disabled="submitting"
+          @click="handleRestore"
+        >
+          {{ submitting ? '恢复中…' : '恢复显示' }}
+        </button>
+      </div>
+      <div v-else class="hide-action">
+        <button
+          type="button"
+          class="btn-hide"
+          :disabled="submitting"
+          @click="handleHide"
+        >
+          {{ submitting ? '处理中…' : '隐藏成员' }}
+        </button>
+        <p class="hide-hint">隐藏后成员将不显示在家族树中，可随时恢复</p>
+      </div>
     </section>
   </aside>
 </template>
@@ -441,5 +481,81 @@ const roleLabel: Record<string, string> = {
 .btn-end-marriage:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.head-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hidden-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #fff4e5;
+  color: #8a6d3b;
+  font-size: 12px;
+  font-weight: 500;
+}
+.section-actions {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border, #d8d4cc);
+}
+.hidden-notice {
+  padding: 16px;
+  background: #fff4e5;
+  border-radius: 8px;
+}
+.hidden-text {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #8a6d3b;
+}
+.btn-restore {
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-accent, #2f5d50);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.btn-restore:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.btn-restore:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+.hide-action {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.btn-hide {
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid var(--color-ended, #8a8580);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-ended, #8a8580);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.btn-hide:hover:not(:disabled) {
+  background: rgba(138, 133, 128, 0.1);
+}
+.btn-hide:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.hide-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #888;
+  text-align: center;
 }
 </style>
