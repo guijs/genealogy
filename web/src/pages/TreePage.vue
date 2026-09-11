@@ -24,6 +24,8 @@ const {
   submitting,
   errorMessage,
   successMessage,
+  hideConfirmOpen,
+  hideConfirmMessage,
 } = storeToRefs(store)
 
 const addFirstName = ref('')
@@ -163,6 +165,14 @@ async function handleEndMarriage() {
 
 function handleCancelEndMarriage() {
   store.closeEndMarriageForm()
+}
+
+async function handleConfirmHide() {
+  await store.confirmHidePerson()
+}
+
+function handleCancelHideConfirm() {
+  store.cancelHideConfirm()
 }
 </script>
 
@@ -384,6 +394,37 @@ function handleCancelEndMarriage() {
             class="btn-close"
             :disabled="submitting"
             @click="handleCancelEndMarriage"
+          >
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 隐藏成员确认（活跃婚姻冲突 409） -->
+    <div v-if="hideConfirmOpen" class="modal-overlay" @click.self="handleCancelHideConfirm">
+      <div class="modal-box">
+        <h2 class="modal-title">确认隐藏</h2>
+        <p class="modal-desc modal-warn">
+          {{ hideConfirmMessage }}
+        </p>
+        <p class="modal-hint">
+          隐藏此成员后，其相关的婚姻关系也将从家族树中消失。确定要继续吗？
+        </p>
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-submit btn-danger"
+            :disabled="submitting"
+            @click="handleConfirmHide"
+          >
+            {{ submitting ? '处理中…' : '确认隐藏' }}
+          </button>
+          <button
+            type="button"
+            class="btn-close"
+            :disabled="submitting"
+            @click="handleCancelHideConfirm"
           >
             取消
           </button>
@@ -631,6 +672,17 @@ function handleCancelEndMarriage() {
   margin: 0 0 16px;
   font-size: 14px;
   color: #555;
+}
+.modal-desc.modal-warn {
+  padding: 12px;
+  background: #fff4e5;
+  border-radius: 6px;
+  color: #8a6d3b;
+}
+.modal-hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #666;
 }
 .btn-danger {
   background: #c53030;

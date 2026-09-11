@@ -173,3 +173,82 @@ export async function updatePerson(
 
   return (await res.json()) as PersonResponse
 }
+
+export interface HidePersonRequest {
+  confirm_hide_with_active_union?: boolean
+}
+
+export class HidePersonConflictError extends Error {
+  readonly status = 409
+  readonly code = 'ACTIVE_UNION_REQUIRES_CONFIRM'
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'HidePersonConflictError'
+  }
+}
+
+/**
+ * 隐藏家族成员
+ * POST /api/v1/families/{familyId}/persons/{personId}/hide
+ *
+ * @param confirmHideWithActiveUnion 若成员有活跃婚姻需确认才可隐藏
+ * @returns void
+ * @throws PersonApiError 404
+ * @throws HidePersonConflictError 409 — 有活跃婚姻需确认
+ */
+export async function hidePerson(
+  familyId: string,
+  personId: string,
+  confirmHideWithActiveUnion?: boolean,
+): Promise<void> {
+  ensureRealApi()
+
+  const base = apiBase()
+  const url = `${base}/api/v1/families/${encodeURIComponent(familyId)}/persons/${encodeURIComponent(personId)}/hide`
+
+  const body: HidePersonRequest | undefined = confirmHideWithActiveUnion
+    ? { confirm_hide_with_active_union: confirmHideWithActiveUnion }
+    : undefined
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: body ? JSON.stringify(body) : undefined,
+  })
+
+  if (res.status === 409) {
+    const data = await res.json().catch(() => ({ error: '有活跃婚姻，需确认后才能隐藏' }))
+    throw new HidePersonConflictError(data.error ?? '有活跃婚姻，需确认后才能隐藏')
+  }
+
+  if (!res.ok) {
+    throw PersonApiError.fromStatus(res.status, url)
+  }
+}
+
+/**
+ * 恢复已隐藏的家族成员
+ * POST /api/v1/families/{familyId}/persons/{personId}/restore
+ *
+ * @returns void
+ * @throws PersonApiError 404
+ */
+export async function restorePerson(
+  familyId: string,
+  personId: string,
+): Promise<void> {
+  ensureRealApi()
+
+  const base = apiBase()
+  const url = `${base}/api/v1/families/${encodeURIComponent(familyId)}/persons/${encodeURIComponent(personId)}/restore`
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+
+  if (!res.ok) {
+    throw PersonApiError.fromStatus(res.status, url)
+  }
+}
