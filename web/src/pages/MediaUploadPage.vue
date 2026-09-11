@@ -6,7 +6,6 @@ import {
   validateFile,
   MediaApiError,
   ALLOWED_MIME_TYPES,
-  MAX_FILE_SIZE,
 } from '../features/tree/api/mediaClient'
 import { isUsingGraphApi } from '../features/tree/api/graphClient'
 

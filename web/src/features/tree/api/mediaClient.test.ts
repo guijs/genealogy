@@ -223,7 +223,13 @@ describe('mediaClient API functions', () => {
   it('requestUploadUrl validates mime type before API call', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
     import.meta.env.VITE_GRAPH_API_BASE = 'https://api.example.com'
-    import.meta.env.VITE_GRAPH_USER_ID = 'user-123'
+    const mockStorage: Record<string, string> = { auth_token: 'test-jwt-token' }
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => mockStorage[key] ?? null,
+      setItem: (key: string, value: string) => { mockStorage[key] = value },
+      removeItem: (key: string) => { delete mockStorage[key] },
+      clear: () => { Object.keys(mockStorage).forEach(key => delete mockStorage[key]) },
+    })
 
     const { requestUploadUrl } = await import('./mediaClient')
     await expect(requestUploadUrl('fam-1', 'image/gif', 1024))
@@ -233,29 +239,57 @@ describe('mediaClient API functions', () => {
   it('requestUploadUrl validates file size before API call', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
     import.meta.env.VITE_GRAPH_API_BASE = 'https://api.example.com'
-    import.meta.env.VITE_GRAPH_USER_ID = 'user-123'
+    const mockStorage: Record<string, string> = { auth_token: 'test-jwt-token' }
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => mockStorage[key] ?? null,
+      setItem: (key: string, value: string) => { mockStorage[key] = value },
+      removeItem: (key: string) => { delete mockStorage[key] },
+      clear: () => { Object.keys(mockStorage).forEach(key => delete mockStorage[key]) },
+    })
 
     const { requestUploadUrl } = await import('./mediaClient')
     await expect(requestUploadUrl('fam-1', 'image/jpeg', 10 * 1024 * 1024))
       .rejects.toThrow('文件过大')
   })
 
-  it('requestUploadUrl throws AUTH_MISSING when VITE_GRAPH_USER_ID not set', async () => {
+  it('requestUploadUrl throws AUTH_MISSING when not logged in', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
     import.meta.env.VITE_GRAPH_API_BASE = 'https://api.example.com'
-    import.meta.env.VITE_GRAPH_USER_ID = ''
+    const mockStorage: Record<string, string> = {}
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => mockStorage[key] ?? null,
+      setItem: (key: string, value: string) => { mockStorage[key] = value },
+      removeItem: (key: string) => { delete mockStorage[key] },
+      clear: () => { Object.keys(mockStorage).forEach(key => delete mockStorage[key]) },
+    })
 
     const { requestUploadUrl } = await import('./mediaClient')
     await expect(requestUploadUrl('fam-1', 'image/jpeg', 1024))
-      .rejects.toThrow('VITE_GRAPH_USER_ID')
+      .rejects.toThrow('请先登录')
   })
 })
 
 describe('request body contract', () => {
+  const mockStorage: Record<string, string> = {}
+
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => mockStorage[key] ?? null,
+      setItem: (key: string, value: string) => { mockStorage[key] = value },
+      removeItem: (key: string) => { delete mockStorage[key] },
+      clear: () => { Object.keys(mockStorage).forEach(key => delete mockStorage[key]) },
+    })
+    mockStorage['auth_token'] = 'test-jwt-token'
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    Object.keys(mockStorage).forEach(key => delete mockStorage[key])
+  })
+
   it('RequestUploadUrlRequest uses snake_case fields', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
     import.meta.env.VITE_GRAPH_API_BASE = 'https://api.example.com'
-    import.meta.env.VITE_GRAPH_USER_ID = 'user-123'
 
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -280,10 +314,9 @@ describe('request body contract', () => {
     expect(body).not.toHaveProperty('fileSize')
   })
 
-  it('request includes X-User-Id header', async () => {
+  it('request includes Authorization Bearer header', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
     import.meta.env.VITE_GRAPH_API_BASE = 'https://api.example.com'
-    import.meta.env.VITE_GRAPH_USER_ID = 'user-xyz-789'
 
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -295,14 +328,13 @@ describe('request body contract', () => {
     await requestUploadUrl('fam-1', 'image/png', 2048)
 
     const [, options] = mockFetch.mock.calls[0]
-    expect(options.headers).toHaveProperty('X-User-Id', 'user-xyz-789')
+    expect(options.headers).toHaveProperty('Authorization', 'Bearer test-jwt-token')
     expect(options.headers).toHaveProperty('Content-Type', 'application/json')
   })
 
   it('URL contains familyId in path', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
     import.meta.env.VITE_GRAPH_API_BASE = 'https://api.example.com'
-    import.meta.env.VITE_GRAPH_USER_ID = 'user-123'
 
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -319,10 +351,23 @@ describe('request body contract', () => {
 })
 
 describe('response handling', () => {
+  const mockStorage: Record<string, string> = {}
+
   beforeEach(() => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
     import.meta.env.VITE_GRAPH_API_BASE = 'https://api.example.com'
-    import.meta.env.VITE_GRAPH_USER_ID = 'user-123'
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => mockStorage[key] ?? null,
+      setItem: (key: string, value: string) => { mockStorage[key] = value },
+      removeItem: (key: string) => { delete mockStorage[key] },
+      clear: () => { Object.keys(mockStorage).forEach(key => delete mockStorage[key]) },
+    })
+    mockStorage['auth_token'] = 'test-jwt-token'
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    Object.keys(mockStorage).forEach(key => delete mockStorage[key])
   })
 
   it('returns upload_url and storage_key from response', async () => {

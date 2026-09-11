@@ -7,7 +7,7 @@
  * - DELETE /api/v1/families/{familyId}/members/{userId} — remove member
  *
  * Constraints:
- * - Auth: X-User-Id header = VITE_GRAPH_USER_ID
+ * - Auth: Authorization: Bearer <token>
  * - familyId in path (from route query)
  * - Only available when real API mode is on (VITE_USE_GRAPH_API / VITE_GRAPH_API_BASE)
  * - Mock mode: cannot fake write/list success pretending persistence
@@ -15,6 +15,7 @@
  * - 409 returned when trying to remove/demote the last admin
  */
 import { isUsingGraphApi } from './graphClient'
+import { getAuthHeadersWithContentType, AuthRequiredError } from './auth'
 
 export type MemberRole = 'admin' | 'editor' | 'viewer'
 
@@ -82,17 +83,13 @@ function apiBase(): string {
 }
 
 function authHeaders(): HeadersInit {
-  const userId = (import.meta.env.VITE_GRAPH_USER_ID as string | undefined)?.trim()
-  if (!userId) {
-    throw new MemberApiError(
-      '请先设置 VITE_GRAPH_USER_ID 环境变量',
-      401,
-      'AUTH_MISSING',
-    )
-  }
-  return {
-    'X-User-Id': userId,
-    'Content-Type': 'application/json',
+  try {
+    return getAuthHeadersWithContentType()
+  } catch (err) {
+    if (err instanceof AuthRequiredError) {
+      throw new MemberApiError('请先登录', 401, 'AUTH_MISSING')
+    }
+    throw err
   }
 }
 

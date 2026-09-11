@@ -5,10 +5,12 @@ import { useRouter, useRoute } from 'vue-router'
 import TreeCanvas from '../features/tree/canvas/TreeCanvas.vue'
 import PersonDetailDrawer from '../features/tree/panels/PersonDetailDrawer.vue'
 import { useTreeViewStore } from '../features/tree/state/treeViewStore'
+import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
 const route = useRoute()
 const store = useTreeViewStore()
+const authStore = useAuthStore()
 const {
   loading,
   truncated,
@@ -185,6 +187,11 @@ async function handleConfirmHide() {
 function handleCancelHideConfirm() {
   store.cancelHideConfirm()
 }
+
+function handleLogout() {
+  authStore.logout()
+  router.push({ name: 'login' })
+}
 </script>
 
 <template>
@@ -242,6 +249,14 @@ function handleCancelHideConfirm() {
           @click="openAddForm"
         >
           添加成员
+        </button>
+        <button
+          v-if="authStore.isAuthenticated && usingGraphApi"
+          type="button"
+          class="btn-logout"
+          @click="handleLogout"
+        >
+          登出
         </button>
         <div v-if="graph" class="meta">
           焦点：{{ graph.rootPersonId }} · depth={{ graph.depth }}
@@ -547,6 +562,20 @@ function handleCancelHideConfirm() {
 .btn-add:hover,
 .btn-create-family:hover {
   opacity: 0.9;
+}
+.btn-logout {
+  padding: 6px 14px;
+  border: 1px solid #c53030;
+  border-radius: 6px;
+  background: #fff;
+  color: #c53030;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-logout:hover {
+  background: #fef0f0;
 }
 .topbar h1 {
   margin: 0;

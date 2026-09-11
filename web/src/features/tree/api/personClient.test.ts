@@ -97,16 +97,24 @@ describe('HidePersonConflictError', () => {
 
 describe('hidePerson API function with real API', () => {
   const originalEnv = { ...import.meta.env }
+  const mockStorage: Record<string, string> = {}
 
   beforeEach(() => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
-    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
     import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => mockStorage[key] ?? null,
+      setItem: (key: string, value: string) => { mockStorage[key] = value },
+      removeItem: (key: string) => { delete mockStorage[key] },
+      clear: () => { Object.keys(mockStorage).forEach(key => delete mockStorage[key]) },
+    })
+    mockStorage['auth_token'] = 'test-jwt-token'
     vi.stubGlobal('fetch', vi.fn())
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    Object.keys(mockStorage).forEach(key => delete mockStorage[key])
     Object.assign(import.meta.env, originalEnv)
   })
 
@@ -125,7 +133,7 @@ describe('hidePerson API function with real API', () => {
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
-          'X-User-Id': 'test-user-id',
+          Authorization: 'Bearer test-jwt-token',
         }),
       })
     )
@@ -177,16 +185,24 @@ describe('hidePerson API function with real API', () => {
 
 describe('restorePerson API function with real API', () => {
   const originalEnv = { ...import.meta.env }
+  const mockStorage: Record<string, string> = {}
 
   beforeEach(() => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
-    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
     import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => mockStorage[key] ?? null,
+      setItem: (key: string, value: string) => { mockStorage[key] = value },
+      removeItem: (key: string) => { delete mockStorage[key] },
+      clear: () => { Object.keys(mockStorage).forEach(key => delete mockStorage[key]) },
+    })
+    mockStorage['auth_token'] = 'test-jwt-token'
     vi.stubGlobal('fetch', vi.fn())
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    Object.keys(mockStorage).forEach(key => delete mockStorage[key])
     Object.assign(import.meta.env, originalEnv)
   })
 
@@ -205,7 +221,7 @@ describe('restorePerson API function with real API', () => {
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
-          'X-User-Id': 'test-user-id',
+          Authorization: 'Bearer test-jwt-token',
         }),
       })
     )

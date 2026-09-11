@@ -94,7 +94,6 @@ describe('memberClient API functions', () => {
 
   it('listMembers throws on empty familyId', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
-    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
 
     const { listMembers } = await import('./memberClient')
     await expect(listMembers(''))
@@ -103,7 +102,6 @@ describe('memberClient API functions', () => {
 
   it('addMember throws on empty familyId', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
-    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
 
     const { addMember } = await import('./memberClient')
     await expect(addMember('', { user_id: 'test-user', role: 'viewer' }))
@@ -121,7 +119,6 @@ describe('memberClient API functions', () => {
 
   it('updateMemberRole throws on empty familyId', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
-    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
 
     const { updateMemberRole } = await import('./memberClient')
     await expect(updateMemberRole('', 'test-user', 'editor'))
@@ -130,7 +127,6 @@ describe('memberClient API functions', () => {
 
   it('updateMemberRole throws on empty userId', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
-    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
 
     const { updateMemberRole } = await import('./memberClient')
     await expect(updateMemberRole('test-family-id', '', 'editor'))
@@ -148,7 +144,6 @@ describe('memberClient API functions', () => {
 
   it('removeMember throws on empty familyId', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
-    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
 
     const { removeMember } = await import('./memberClient')
     await expect(removeMember('', 'test-user'))
@@ -157,7 +152,6 @@ describe('memberClient API functions', () => {
 
   it('removeMember throws on empty userId', async () => {
     import.meta.env.VITE_USE_GRAPH_API = 'true'
-    import.meta.env.VITE_GRAPH_USER_ID = 'test-user-id'
 
     const { removeMember } = await import('./memberClient')
     await expect(removeMember('test-family-id', ''))
