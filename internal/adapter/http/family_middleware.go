@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	FamilyIDContextKey contextKey = "familyID"
+	FamilyIDContextKey   contextKey = "familyID"
+	MembershipContextKey contextKey = "membership"
 )
 
 type FamilyMiddleware struct {
@@ -46,17 +47,41 @@ func (m *FamilyMiddleware) RequireFamilyMember(next http.Handler) http.Handler {
 			return
 		}
 
-		if !m.membershipStore.IsMember(familyID, userID) {
+		membership, ok := m.membershipStore.GetMembership(familyID, userID)
+		if !ok {
 			writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 			return
 		}
 
 		ctx := context.WithValue(r.Context(), FamilyIDContextKey, familyID)
+		ctx = context.WithValue(ctx, MembershipContextKey, membership)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (m *FamilyMiddleware) RequireWriteAccess(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		membership, ok := GetMembership(r.Context())
+		if !ok {
+			writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+			return
+		}
+
+		if !membership.Role.CanWrite() {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: "write access required"})
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }
 
 func GetFamilyID(ctx context.Context) (uuid.UUID, bool) {
 	familyID, ok := ctx.Value(FamilyIDContextKey).(uuid.UUID)
 	return familyID, ok
+}
+
+func GetMembership(ctx context.Context) (*family.Membership, bool) {
+	membership, ok := ctx.Value(MembershipContextKey).(*family.Membership)
+	return membership, ok
 }
