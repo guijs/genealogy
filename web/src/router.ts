@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import TreePage from './pages/TreePage.vue'
 import CreateFamilyPage from './pages/CreateFamilyPage.vue'
 import MembersPage from './pages/MembersPage.vue'
+import MediaUploadPage from './pages/MediaUploadPage.vue'
 
 const routes = [
   {
@@ -18,6 +19,11 @@ const routes = [
     path: '/members',
     name: 'members',
     component: MembersPage,
+  },
+  {
+    path: '/media-upload',
+    name: 'mediaUpload',
+    component: MediaUploadPage,
   },
 ]
 

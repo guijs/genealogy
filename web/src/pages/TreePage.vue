@@ -106,6 +106,15 @@ function goToMembers() {
   }
 }
 
+function goToMediaUpload() {
+  const familyId = route.query.familyId as string | undefined
+  if (familyId) {
+    router.push({ name: 'mediaUpload', query: { familyId } })
+  } else {
+    router.push({ name: 'mediaUpload' })
+  }
+}
+
 watch(addSpouseFormOpen, (open) => {
   if (open) {
     selectedSpouseId.value = ''
@@ -188,6 +197,14 @@ function handleCancelEndMarriage() {
           @click="goToMembers"
         >
           成员管理
+        </button>
+        <button
+          v-if="usingGraphApi"
+          type="button"
+          class="btn-create-family"
+          @click="goToMediaUpload"
+        >
+          媒体上传
         </button>
         <button
           v-if="usingGraphApi"
