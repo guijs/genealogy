@@ -6,6 +6,7 @@ import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
 import com.genealogy.store.UnionStore;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -60,6 +61,7 @@ public class PersonService {
         }
     }
 
+    @Transactional
     public Person createPerson(UUID familyId, String firstName, String lastName) {
         if (isBlank(firstName) && isBlank(lastName)) {
             throw new InvalidNameException("at least one name field is required");
@@ -91,6 +93,7 @@ public class PersonService {
         return person;
     }
 
+    @Transactional
     public Person updatePerson(UUID familyId, UUID personId, String firstName, String lastName) {
         Optional<Person> existingOpt = personStore.getPerson(personId);
         if (existingOpt.isEmpty() || !existingOpt.get().getFamilyId().equals(familyId)) {
@@ -149,6 +152,7 @@ public class PersonService {
         return s == null || s.isBlank();
     }
 
+    @Transactional
     public void hidePerson(UUID familyId, UUID personId, boolean confirmActiveUnion) {
         Optional<Person> existingOpt = personStore.getPerson(personId);
         if (existingOpt.isEmpty() || !existingOpt.get().getFamilyId().equals(familyId)) {
@@ -182,6 +186,7 @@ public class PersonService {
         projectionStore.upsertPerson(updated);
     }
 
+    @Transactional
     public void restorePerson(UUID familyId, UUID personId) {
         Optional<Person> existingOpt = personStore.getPerson(personId);
         if (existingOpt.isEmpty() || !existingOpt.get().getFamilyId().equals(familyId)) {

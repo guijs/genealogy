@@ -10,6 +10,7 @@ import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
 import com.genealogy.store.UnionStore;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
@@ -25,6 +26,7 @@ public class UnionService {
         this.projectionStore = projectionStore;
     }
 
+    @Transactional
     public Union createUnion(UUID familyId, UUID partnerAId, UUID partnerBId, String startedAt) {
         if (partnerAId.equals(partnerBId)) {
             throw new SelfUnionException();
@@ -62,6 +64,7 @@ public class UnionService {
         return union;
     }
 
+    @Transactional
     public Union endUnion(UUID familyId, UUID unionId, String endedReason, String endedAt) {
         Union union = unionStore.getUnionInFamily(unionId, familyId)
                 .orElseThrow(UnionNotFoundException::new);
