@@ -316,3 +316,318 @@ func TestGetGraph_DepthExceedsMax_Returns400NotTruncated(t *testing.T) {
 		t.Error("expected truncated=false for single person")
 	}
 }
+
+func TestGetGraph_MarriageWithHiddenPartnerExcluded(t *testing.T) {
+	store := projection.NewInMemoryStore()
+	familyID := uuid.New()
+
+	// Create: visible person married to hidden person
+	visible := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Visible", Hidden: false}
+	hidden := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Hidden", Hidden: true}
+	alsoVisible := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Also Visible", Hidden: false}
+
+	store.CreatePerson(visible)
+	store.CreatePerson(hidden)
+	store.CreatePerson(alsoVisible)
+
+	// Marriage between visible and hidden person - should be excluded
+	marriageWithHidden := &projection.Marriage{
+		ID:         uuid.New(),
+		FamilyID:   familyID,
+		Partner1ID: visible.ID,
+		Partner2ID: hidden.ID,
+		Status:     projection.MarriageActive,
+	}
+	store.CreateMarriage(marriageWithHidden)
+
+	// Marriage between two visible persons - should be included
+	marriageVisible := &projection.Marriage{
+		ID:         uuid.New(),
+		FamilyID:   familyID,
+		Partner1ID: visible.ID,
+		Partner2ID: alsoVisible.ID,
+		Status:     projection.MarriageActive,
+	}
+	store.CreateMarriage(marriageVisible)
+
+	service := NewGraphService(store)
+
+	graph, err := service.GetGraph(GetGraphRequest{
+		FamilyID:     familyID,
+		RootPersonID: visible.ID,
+		Depth:        3,
+	})
+
+	if err != nil {
+		t.Fatalf("GetGraph failed: %v", err)
+	}
+
+	// Build person ID set from response
+	personIDs := make(map[string]bool)
+	for _, p := range graph.Persons {
+		personIDs[p.ID] = true
+	}
+
+	// Hidden person should NOT be in persons
+	if personIDs[hidden.ID.String()] {
+		t.Error("hidden person should not be in persons")
+	}
+
+	// Verify all marriage partner IDs are in persons (no dangling references)
+	for _, m := range graph.Marriages {
+		if !personIDs[m.PartnerIDs[0]] {
+			t.Errorf("marriage %s references missing partner %s", m.ID, m.PartnerIDs[0])
+		}
+		if !personIDs[m.PartnerIDs[1]] {
+			t.Errorf("marriage %s references missing partner %s", m.ID, m.PartnerIDs[1])
+		}
+	}
+
+	// Only the marriage between visible persons should be present
+	if len(graph.Marriages) != 1 {
+		t.Errorf("expected 1 marriage (visible-visible), got %d", len(graph.Marriages))
+	}
+
+	// The remaining marriage should be the visible-alsoVisible one
+	if len(graph.Marriages) == 1 {
+		m := graph.Marriages[0]
+		if m.ID != marriageVisible.ID.String() {
+			t.Errorf("expected marriage %s, got %s", marriageVisible.ID.String(), m.ID)
+		}
+	}
+}
+
+func TestGetGraph_MarriageWithBothPartnersHiddenExcluded(t *testing.T) {
+	store := projection.NewInMemoryStore()
+	familyID := uuid.New()
+
+	// Create: root visible, has child who is hidden, hidden child married to hidden spouse
+	root := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Root", Hidden: false}
+	hiddenChild := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Hidden Child", Hidden: true}
+	hiddenSpouse := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Hidden Spouse", Hidden: true}
+
+	store.CreatePerson(root)
+	store.CreatePerson(hiddenChild)
+	store.CreatePerson(hiddenSpouse)
+
+	// Marriage between two hidden persons
+	marriageHidden := &projection.Marriage{
+		ID:         uuid.New(),
+		FamilyID:   familyID,
+		Partner1ID: hiddenChild.ID,
+		Partner2ID: hiddenSpouse.ID,
+		Status:     projection.MarriageActive,
+	}
+	store.CreateMarriage(marriageHidden)
+
+	// Root is parent of hidden child
+	rel := &projection.Relationship{
+		ID:       uuid.New(),
+		FamilyID: familyID,
+		ParentID: root.ID,
+		ChildID:  hiddenChild.ID,
+		Subtype:  projection.SubtypeBiological,
+		Role:     projection.RoleFather,
+	}
+	store.CreateRelationship(rel)
+
+	service := NewGraphService(store)
+
+	graph, err := service.GetGraph(GetGraphRequest{
+		FamilyID:     familyID,
+		RootPersonID: root.ID,
+		Depth:        3,
+	})
+
+	if err != nil {
+		t.Fatalf("GetGraph failed: %v", err)
+	}
+
+	// No marriages should be in the result (the only marriage has hidden partners)
+	if len(graph.Marriages) != 0 {
+		t.Errorf("expected 0 marriages (all partners hidden), got %d", len(graph.Marriages))
+	}
+
+	// Only root should be in persons
+	if len(graph.Persons) != 1 {
+		t.Errorf("expected 1 person (root), got %d", len(graph.Persons))
+	}
+}
+
+func TestGetGraph_MarriageDanglingFilterWithCrossFamilySpouse(t *testing.T) {
+	// This test exercises the map-level dangling marriage filter.
+	// When a marriage is added during traversal but the spouse is from a different family,
+	// the spouse won't be added to the persons map, triggering the dangling filter.
+	store := projection.NewInMemoryStore()
+	familyID := uuid.New()
+	otherFamilyID := uuid.New()
+
+	// Person in target family
+	person := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Person"}
+	// Spouse in different family
+	crossFamilySpouse := &projection.Person{ID: uuid.New(), FamilyID: otherFamilyID, DisplayName: "Cross-Family Spouse"}
+
+	store.CreatePerson(person)
+	store.CreatePerson(crossFamilySpouse)
+
+	// Marriage exists in person's family
+	marriage := &projection.Marriage{
+		ID:         uuid.New(),
+		FamilyID:   familyID,
+		Partner1ID: person.ID,
+		Partner2ID: crossFamilySpouse.ID,
+		Status:     projection.MarriageActive,
+	}
+	store.CreateMarriage(marriage)
+
+	service := NewGraphService(store)
+
+	graph, err := service.GetGraph(GetGraphRequest{
+		FamilyID:     familyID,
+		RootPersonID: person.ID,
+		Depth:        3,
+	})
+
+	if err != nil {
+		t.Fatalf("GetGraph failed: %v", err)
+	}
+
+	// Build person ID set
+	personIDs := make(map[string]bool)
+	for _, p := range graph.Persons {
+		personIDs[p.ID] = true
+	}
+
+	// Cross-family spouse should NOT be in persons
+	if personIDs[crossFamilySpouse.ID.String()] {
+		t.Error("cross-family spouse should not be in persons")
+	}
+
+	// The marriage should be filtered out (dangling reference)
+	if len(graph.Marriages) != 0 {
+		t.Errorf("expected 0 marriages (cross-family spouse filtered), got %d", len(graph.Marriages))
+	}
+
+	// Verify no dangling marriage references
+	for _, m := range graph.Marriages {
+		if !personIDs[m.PartnerIDs[0]] {
+			t.Errorf("marriage %s references missing partner %s", m.ID, m.PartnerIDs[0])
+		}
+		if !personIDs[m.PartnerIDs[1]] {
+			t.Errorf("marriage %s references missing partner %s", m.ID, m.PartnerIDs[1])
+		}
+	}
+}
+
+func TestGetGraph_MarriageDanglingFilterWithTruncatedPartner(t *testing.T) {
+	// This is an improved version of TestGetGraph_NoDanglingMarriageWhenPartnerTruncated.
+	// Structure: root -> child1 -> grandchild (depth=2, connected via root through two paths)
+	//            root -> child2 (who is married to grandchild)
+	// With depth=1: child1, child2 are visited. grandchild is reachable via marriage
+	// to child2 but not via regular depth traversal from child1.
+	// The marriage between child2 and grandchild is added when visiting child2,
+	// and grandchild is added as spouse. This exercises the marriage inclusion logic.
+
+	store := projection.NewInMemoryStore()
+	familyID := uuid.New()
+
+	root := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Root"}
+	child1 := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Child1"}
+	child2 := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Child2"}
+	grandchild := &projection.Person{ID: uuid.New(), FamilyID: familyID, DisplayName: "Grandchild"}
+
+	store.CreatePerson(root)
+	store.CreatePerson(child1)
+	store.CreatePerson(child2)
+	store.CreatePerson(grandchild)
+
+	// root -> child1
+	rel1 := &projection.Relationship{
+		ID:       uuid.New(),
+		FamilyID: familyID,
+		ParentID: root.ID,
+		ChildID:  child1.ID,
+		Subtype:  projection.SubtypeBiological,
+		Role:     projection.RoleFather,
+	}
+	// root -> child2
+	rel2 := &projection.Relationship{
+		ID:       uuid.New(),
+		FamilyID: familyID,
+		ParentID: root.ID,
+		ChildID:  child2.ID,
+		Subtype:  projection.SubtypeBiological,
+		Role:     projection.RoleFather,
+	}
+	// child1 -> grandchild
+	rel3 := &projection.Relationship{
+		ID:       uuid.New(),
+		FamilyID: familyID,
+		ParentID: child1.ID,
+		ChildID:  grandchild.ID,
+		Subtype:  projection.SubtypeBiological,
+		Role:     projection.RoleFather,
+	}
+	store.CreateRelationship(rel1)
+	store.CreateRelationship(rel2)
+	store.CreateRelationship(rel3)
+
+	// child2 is married to grandchild (cross-generational, but valid scenario)
+	marriage := &projection.Marriage{
+		ID:         uuid.New(),
+		FamilyID:   familyID,
+		Partner1ID: child2.ID,
+		Partner2ID: grandchild.ID,
+		Status:     projection.MarriageActive,
+	}
+	store.CreateMarriage(marriage)
+
+	service := NewGraphService(store)
+
+	graph, err := service.GetGraph(GetGraphRequest{
+		FamilyID:     familyID,
+		RootPersonID: root.ID,
+		Depth:        1,
+	})
+
+	if err != nil {
+		t.Fatalf("GetGraph failed: %v", err)
+	}
+
+	// Build person ID set
+	personIDs := make(map[string]bool)
+	for _, p := range graph.Persons {
+		personIDs[p.ID] = true
+	}
+
+	// With depth=1 from root:
+	// - root (depth=0), child1 (depth=1), child2 (depth=1) are visited via relationships
+	// - grandchild is added as spouse of child2 (via marriage processing)
+	// - grandchild should be in persons (spouse handling adds them)
+	// - The marriage should be present (both partners in persons)
+
+	// Verify the marriage is present with no dangling references
+	for _, m := range graph.Marriages {
+		if !personIDs[m.PartnerIDs[0]] {
+			t.Errorf("marriage %s references missing partner %s", m.ID, m.PartnerIDs[0])
+		}
+		if !personIDs[m.PartnerIDs[1]] {
+			t.Errorf("marriage %s references missing partner %s", m.ID, m.PartnerIDs[1])
+		}
+	}
+
+	// Verify truncated is true (child1->grandchild relationship would go beyond depth)
+	if !graph.Truncated {
+		t.Error("expected truncated=true")
+	}
+
+	// Verify all relationship endpoints are in persons
+	for _, r := range graph.Relationships {
+		if !personIDs[r.ParentID] {
+			t.Errorf("relationship %s references missing parent %s", r.ID, r.ParentID)
+		}
+		if !personIDs[r.ChildID] {
+			t.Errorf("relationship %s references missing child %s", r.ID, r.ChildID)
+		}
+	}
+}
