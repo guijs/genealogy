@@ -5,7 +5,10 @@ import com.genealogy.domain.projection.ProjectionPerson;
 import com.genealogy.domain.projection.ProjectionRelationship;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -76,6 +79,15 @@ public class ProjectionStore {
 
     public void createRelationship(ProjectionRelationship relationship) {
         relationships.put(relationship.getId(), relationship);
+    }
+
+    public void updateMarriage(ProjectionMarriage marriage) {
+        marriages.put(marriage.getId(), marriage);
+    }
+
+    public Optional<ProjectionMarriage> getMarriage(UUID id) {
+        ProjectionMarriage m = marriages.get(id);
+        return m != null ? Optional.of(m.copy()) : Optional.empty();
     }
 
     public void clear() {
