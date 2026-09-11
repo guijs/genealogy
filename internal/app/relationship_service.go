@@ -44,17 +44,11 @@ func (s *RelationshipService) AddParentChild(req AddParentChildRequest) error {
 		return ErrInvalidRelationType
 	}
 
-	graph := s.kinshipStore.GetGraphForFamily(req.FamilyID)
-
 	rel := kinship.Relation{
 		From: req.ParentID,
 		To:   req.ChildID,
 		Type: req.RelationType,
 	}
 
-	if err := graph.AddRelation(rel); err != nil {
-		return err
-	}
-
-	return nil
+	return s.kinshipStore.AddRelation(req.FamilyID, rel)
 }

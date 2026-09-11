@@ -8,7 +8,7 @@ import (
 
 type Store interface {
 	GetGraphForFamily(familyID uuid.UUID) *Graph
-	SaveRelation(familyID uuid.UUID, rel Relation)
+	AddRelation(familyID uuid.UUID, rel Relation) error
 }
 
 type InMemoryStore struct {
@@ -33,7 +33,7 @@ func (s *InMemoryStore) GetGraphForFamily(familyID uuid.UUID) *Graph {
 	return g
 }
 
-func (s *InMemoryStore) SaveRelation(familyID uuid.UUID, rel Relation) {
+func (s *InMemoryStore) AddRelation(familyID uuid.UUID, rel Relation) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	g, ok := s.graphs[familyID]
@@ -41,6 +41,5 @@ func (s *InMemoryStore) SaveRelation(familyID uuid.UUID, rel Relation) {
 		g = NewGraph()
 		s.graphs[familyID] = g
 	}
-	g.relations = append(g.relations, rel)
-	g.children[rel.To] = append(g.children[rel.To], rel)
+	return g.AddRelation(rel)
 }
