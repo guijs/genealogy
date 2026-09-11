@@ -53,6 +53,10 @@ public class FamilyStore {
         return familyMemberMapper.findFamiliesByUserId(userId);
     }
 
+    public List<Membership> listMembers(UUID familyId) {
+        return familyMemberMapper.findByFamilyId(familyId);
+    }
+
     public void clear() {
         familyMemberMapper.deleteAll();
         familyMapper.deleteAll();
