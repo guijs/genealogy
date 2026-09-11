@@ -500,6 +500,51 @@ class MembersControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.role").value("editor"));
     }
 
+    @Test
+    void updateMemberRole_cannotDemoteLastAdmin_returns409() throws Exception {
+        String body = """
+            {"role": "editor"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + ADMIN_USER_ID)
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("cannot remove the last admin"));
+    }
+
+    @Test
+    void updateMemberRole_canDemoteAdminWhenMultipleAdmins_returns200() throws Exception {
+        UUID secondAdminId = UUID.fromString("66666666-6666-6666-6666-666666666666");
+        String addBody = """
+            {"user_id": "%s", "role": "admin"}
+            """.formatted(secondAdminId);
+
+        mockMvc.perform(post("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", ADMIN_USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(addBody))
+                .andExpect(status().isCreated());
+
+        String demoteBody = """
+            {"role": "editor"}
+            """;
+
+        mockMvc.perform(patch("/api/v1/families/" + familyId + "/members/" + ADMIN_USER_ID)
+                        .header("X-User-Id", secondAdminId.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(demoteBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user_id").value(ADMIN_USER_ID.toString()))
+                .andExpect(jsonPath("$.role").value("editor"));
+
+        mockMvc.perform(get("/api/v1/families/" + familyId + "/members")
+                        .header("X-User-Id", secondAdminId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.members[?(@.user_id == '%s')].role".formatted(ADMIN_USER_ID)).value("editor"));
+    }
+
     // DELETE /members/{userId} tests
 
     @Test

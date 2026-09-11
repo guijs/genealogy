@@ -263,7 +263,8 @@ public class FamilyController {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         }
 
-        if (!familyStore.isMember(familyId, targetUserId)) {
+        Optional<Membership> targetMembership = familyStore.getMembership(familyId, targetUserId);
+        if (targetMembership.isEmpty()) {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         }
 
@@ -276,6 +277,13 @@ public class FamilyController {
             newRole = Role.valueOf(body.getRole().toUpperCase());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(400).body(new ErrorResponse("invalid role"));
+        }
+
+        if (targetMembership.get().getRole() == Role.ADMIN && newRole != Role.ADMIN) {
+            int adminCount = familyStore.countAdmins(familyId);
+            if (adminCount <= 1) {
+                return ResponseEntity.status(409).body(new ErrorResponse("cannot remove the last admin"));
+            }
         }
 
         familyStore.updateMemberRole(familyId, targetUserId, newRole);
