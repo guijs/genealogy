@@ -83,6 +83,14 @@ func (s *GraphService) GetGraph(req GetGraphRequest) (*projection.GraphProjectio
 
 	marriageDTOs := make([]projection.MarriageDTO, 0)
 	for _, m := range marriages {
+		partner1 := persons[m.Partner1ID]
+		partner2 := persons[m.Partner2ID]
+		if partner1 != nil && partner1.Hidden {
+			continue
+		}
+		if partner2 != nil && partner2.Hidden {
+			continue
+		}
 		marriageDTOs = append(marriageDTOs, projection.MarriageDTO{
 			ID:          m.ID.String(),
 			PartnerIDs:  [2]string{m.Partner1ID.String(), m.Partner2ID.String()},
