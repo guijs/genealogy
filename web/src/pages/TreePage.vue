@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import TreeCanvas from '../features/tree/canvas/TreeCanvas.vue'
 import PersonDetailDrawer from '../features/tree/panels/PersonDetailDrawer.vue'
 import { useTreeViewStore } from '../features/tree/state/treeViewStore'
 
 const router = useRouter()
+const route = useRoute()
 const store = useTreeViewStore()
 const {
   loading,
@@ -18,6 +19,7 @@ const {
   addSpouseFormOpen,
   endMarriageFormOpen,
   endMarriageId,
+  emptyFamily,
   selectedPerson,
   submitting,
   errorMessage,
@@ -32,8 +34,32 @@ const endMarriageReason = ref('')
 const endMarriageDate = ref('')
 
 onMounted(() => {
-  void store.loadDemo()
+  const familyId = route.query.familyId as string | undefined
+  const rootPersonId = route.query.rootPersonId as string | undefined
+
+  if (familyId) {
+    void store.loadFamily(familyId, rootPersonId)
+  } else {
+    void store.loadDemo()
+  }
 })
+
+// 监听路由参数变化（例如从家族列表点击不同家族）
+watch(
+  () => route.query.familyId,
+  (newFamilyId, oldFamilyId) => {
+    if (newFamilyId !== oldFamilyId) {
+      const familyId = newFamilyId as string | undefined
+      const rootPersonId = route.query.rootPersonId as string | undefined
+
+      if (familyId) {
+        void store.loadFamily(familyId, rootPersonId)
+      } else {
+        void store.loadDemo()
+      }
+    }
+  },
+)
 
 const availableSpouseCandidates = computed(() => {
   if (!graph.value || !selectedPerson.value) return []
@@ -333,6 +359,18 @@ function handleCancelEndMarriage() {
 
     <div class="stage">
       <p v-if="loading" class="loading">加载投影…</p>
+      <div v-else-if="emptyFamily" class="empty-state">
+        <p class="empty-title">这是一个新家族</p>
+        <p class="empty-desc">暂无成员，请先添加第一位家族成员</p>
+        <button
+          v-if="usingGraphApi"
+          type="button"
+          class="btn-add-first"
+          @click="openAddForm"
+        >
+          添加第一位成员
+        </button>
+      </div>
       <TreeCanvas v-else />
       <PersonDetailDrawer />
     </div>
@@ -565,5 +603,39 @@ function handleCancelEndMarriage() {
 }
 .btn-danger:hover:not(:disabled) {
   background: #9b2c2c;
+}
+/* 空家族状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+}
+.empty-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+}
+.empty-desc {
+  margin: 0 0 24px;
+  font-size: 15px;
+  color: #666;
+}
+.btn-add-first {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  background: var(--color-accent, #2f5d50);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.btn-add-first:hover {
+  opacity: 0.9;
 }
 </style>
