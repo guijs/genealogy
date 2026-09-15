@@ -5,10 +5,11 @@ import { useRouter, useRoute } from 'vue-router'
 import TreeCanvas from '../features/tree/canvas/TreeCanvas.vue'
 import PersonDetailDrawer from '../features/tree/panels/PersonDetailDrawer.vue'
 import GenerationsView from '../features/tree/panels/GenerationsView.vue'
+import LineageView from '../features/tree/panels/LineageView.vue'
 import { useTreeViewStore } from '../features/tree/state/treeViewStore'
 import { useAuthStore } from '../stores/authStore'
 
-type ViewTab = 'tree' | 'generations'
+type ViewTab = 'tree' | 'generations' | 'lineage'
 
 const router = useRouter()
 const route = useRoute()
@@ -76,6 +77,8 @@ onMounted(() => {
 
   if (viewParam === 'generations') {
     activeTab.value = 'generations'
+  } else if (viewParam === 'lineage') {
+    activeTab.value = 'lineage'
   }
 
   if (familyId) {
@@ -256,6 +259,16 @@ function handleLogout() {
             @click="switchTab('generations')"
           >
             世代
+          </button>
+          <button
+            type="button"
+            class="tab-btn"
+            :class="{ active: activeTab === 'lineage' }"
+            role="tab"
+            :aria-selected="activeTab === 'lineage'"
+            @click="switchTab('lineage')"
+          >
+            世系
           </button>
         </nav>
       </div>
@@ -544,6 +557,9 @@ function handleLogout() {
 
       <!-- Generations view -->
       <GenerationsView v-if="activeTab === 'generations'" />
+
+      <!-- Lineage view -->
+      <LineageView v-if="activeTab === 'lineage'" />
 
       <PersonDetailDrawer />
 
