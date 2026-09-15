@@ -190,6 +190,29 @@ export const chenDivorceRemarriageFixture: GraphProjection = {
       role: 'father',
     },
   ],
+  siblings: [
+    // 陈芳 & 陈华：full siblings（同胞），共享陈建国+王美兰
+    {
+      personId: 'p-chen-fang',
+      siblingId: 'p-chen-hua',
+      kind: 'full',
+      sharedParentIds: ['p-chen-jianguo', 'p-wang-meilan'],
+    },
+    // 陈芳 & 陈明：paternal_half（同父异母），只共享陈建国
+    {
+      personId: 'p-chen-fang',
+      siblingId: 'p-chen-ming',
+      kind: 'paternal_half',
+      sharedParentIds: ['p-chen-jianguo'],
+    },
+    // 陈华 & 陈明：paternal_half（同父异母），只共享陈建国
+    {
+      personId: 'p-chen-hua',
+      siblingId: 'p-chen-ming',
+      kind: 'paternal_half',
+      sharedParentIds: ['p-chen-jianguo'],
+    },
+  ],
 }
 
 /** 模拟异步拉取 graph 投影 */

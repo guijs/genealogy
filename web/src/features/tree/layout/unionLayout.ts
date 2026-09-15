@@ -16,6 +16,7 @@ import type {
   PositionedEdge,
   PositionedNode,
   RelationshipDTO,
+  SiblingKind,
   Union,
 } from '../api/types'
 
@@ -436,4 +437,55 @@ export function deriveKinForPerson(
   }
 
   return { parents, spouses, children }
+}
+
+/** Sibling kind labels for Chinese UI */
+export const SIBLING_KIND_LABEL: Record<SiblingKind, string> = {
+  full: '同胞',
+  paternal_half: '同父异母',
+  maternal_half: '同母异父',
+}
+
+/**
+ * Derive siblings for the selected person from graph.siblings.
+ * Filters sibling pairs where personId or siblingId matches the selected person,
+ * resolves display names from persons when present.
+ */
+export function deriveSiblingsForPerson(
+  personId: string,
+  projection: Pick<GraphProjection, 'persons' | 'siblings'>,
+): {
+  person: PersonDTO | null
+  siblingId: string
+  kind: SiblingKind
+  sharedParentIds: string[]
+}[] {
+  if (!projection.siblings?.length) return []
+
+  const byId = new Map(projection.persons.map((p) => [p.id, p]))
+  const results: {
+    person: PersonDTO | null
+    siblingId: string
+    kind: SiblingKind
+    sharedParentIds: string[]
+  }[] = []
+
+  for (const sib of projection.siblings) {
+    let otherId: string | null = null
+    if (sib.personId === personId) {
+      otherId = sib.siblingId
+    } else if (sib.siblingId === personId) {
+      otherId = sib.personId
+    }
+    if (otherId) {
+      results.push({
+        person: byId.get(otherId) ?? null,
+        siblingId: otherId,
+        kind: sib.kind,
+        sharedParentIds: sib.sharedParentIds,
+      })
+    }
+  }
+
+  return results
 }
