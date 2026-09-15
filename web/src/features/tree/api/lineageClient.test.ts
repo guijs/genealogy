@@ -358,4 +358,68 @@ describe('lineageClient', () => {
       }
     })
   })
+
+  /**
+   * MAJOR-1 regression: setProgenitor errors should NOT affect lineage data.
+   * UI uses separate actionError for write failures, loadError for load failures.
+   * This test verifies that fetchLineage and setProgenitor are independent operations.
+   */
+  describe('MAJOR-1: fetchLineage + setProgenitor error isolation', () => {
+    const originalEnv = { ...import.meta.env }
+
+    beforeEach(() => {
+      vi.stubGlobal('fetch', vi.fn())
+      vi.stubGlobal('localStorage', mockLocalStorage)
+      mockLocalStorage.clear()
+    })
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+      Object.assign(import.meta.env, originalEnv)
+    })
+
+    it('setProgenitor 403 does not invalidate previously fetched lineage', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      const lineageData = {
+        family_id: 'family-1',
+        progenitor_person_id: 'progenitor-1',
+        generations: [
+          { index: 1, persons: [{ id: 'progenitor-1', display_name: 'Ancestor', conflict: false }] },
+          { index: 2, persons: [{ id: 'child-1', display_name: 'Child', conflict: false }] },
+        ],
+      }
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(lineageData),
+      } as Response)
+
+      const lineage = await fetchLineage({ familyId: 'family-1' })
+      expect(lineage.progenitor_person_id).toBe('progenitor-1')
+      expect(lineage.generations).toHaveLength(2)
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: () => Promise.resolve({ error: 'admin access required' }),
+      } as Response)
+
+      let putError: LineageApiError | null = null
+      try {
+        await setProgenitor({ familyId: 'family-1', personId: 'new-progenitor' })
+      } catch (e) {
+        putError = e as LineageApiError
+      }
+
+      expect(putError).not.toBeNull()
+      expect(putError!.status).toBe(403)
+      expect(putError!.code).toBe('ADMIN_REQUIRED')
+
+      expect(lineage.progenitor_person_id).toBe('progenitor-1')
+      expect(lineage.generations).toHaveLength(2)
+    })
+  })
 })

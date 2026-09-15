@@ -12,7 +12,8 @@ const store = useTreeViewStore()
 const { currentFamilyId, usingGraphApi } = storeToRefs(store)
 
 const loading = ref(false)
-const errorMessage = ref<string | null>(null)
+const loadError = ref<string | null>(null)
+const actionError = ref<string | null>(null)
 const lineage = ref<LineageResponse | null>(null)
 
 const members = ref<FamilyMember[]>([])
@@ -45,17 +46,17 @@ const availablePersons = computed(() => {
 
 async function loadLineage() {
   if (!currentFamilyId.value) {
-    errorMessage.value = '未选择家族'
+    loadError.value = '未选择家族'
     return
   }
 
   if (!usingGraphApi.value) {
-    errorMessage.value = '世系视图需要连接真实 API（当前为 mock 模式）'
+    loadError.value = '世系视图需要连接真实 API（当前为 mock 模式）'
     return
   }
 
   loading.value = true
-  errorMessage.value = null
+  loadError.value = null
 
   try {
     lineage.value = await fetchLineage({
@@ -63,9 +64,9 @@ async function loadLineage() {
     })
   } catch (e) {
     if (e instanceof LineageApiError) {
-      errorMessage.value = e.message
+      loadError.value = e.message
     } else {
-      errorMessage.value = '加载世系视图失败'
+      loadError.value = '加载世系视图失败'
     }
     lineage.value = null
   } finally {
@@ -99,6 +100,7 @@ async function loadPersons() {
 
 function openProgenitorPicker() {
   selectedProgenitorId.value = ''
+  actionError.value = null
   progenitorPickerOpen.value = true
 }
 
@@ -108,6 +110,7 @@ function closeProgenitorPicker() {
 }
 
 function openChangeConfirm() {
+  actionError.value = null
   changeConfirmOpen.value = true
 }
 
@@ -117,6 +120,7 @@ function closeChangeConfirm() {
 }
 
 function openClearConfirm() {
+  actionError.value = null
   clearConfirmOpen.value = true
 }
 
@@ -128,7 +132,7 @@ async function handleSetProgenitor() {
   if (!currentFamilyId.value || !selectedProgenitorId.value) return
 
   submitting.value = true
-  errorMessage.value = null
+  actionError.value = null
 
   try {
     await setProgenitor({
@@ -140,9 +144,9 @@ async function handleSetProgenitor() {
     await loadLineage()
   } catch (e) {
     if (e instanceof LineageApiError) {
-      errorMessage.value = e.message
+      actionError.value = e.message
     } else {
-      errorMessage.value = '设置始迁祖失败'
+      actionError.value = '设置始迁祖失败'
     }
   } finally {
     submitting.value = false
@@ -153,7 +157,7 @@ async function handleClearProgenitor() {
   if (!currentFamilyId.value) return
 
   submitting.value = true
-  errorMessage.value = null
+  actionError.value = null
 
   try {
     await setProgenitor({
@@ -164,9 +168,9 @@ async function handleClearProgenitor() {
     await loadLineage()
   } catch (e) {
     if (e instanceof LineageApiError) {
-      errorMessage.value = e.message
+      actionError.value = e.message
     } else {
-      errorMessage.value = '清除始迁祖失败'
+      actionError.value = '清除始迁祖失败'
     }
   } finally {
     submitting.value = false
@@ -195,9 +199,9 @@ defineExpose({ reload: loadLineage })
       <p class="loading-text">加载世系视图…</p>
     </div>
 
-    <!-- Error state -->
-    <div v-else-if="errorMessage" class="state-error" role="alert">
-      <p class="error-text">{{ errorMessage }}</p>
+    <!-- Load error state -->
+    <div v-else-if="loadError" class="state-error" role="alert">
+      <p class="error-text">{{ loadError }}</p>
       <button
         v-if="usingGraphApi"
         type="button"
@@ -295,6 +299,10 @@ defineExpose({ reload: loadLineage })
         <p class="modal-desc">
           选择一位家族成员作为始迁祖（第1世），世系将从此人向下展开。
         </p>
+        <!-- Action error in modal -->
+        <div v-if="actionError && !changeConfirmOpen" class="modal-error" role="alert">
+          {{ actionError }}
+        </div>
         <div class="form-row">
           <label class="form-label">选择成员</label>
           <select
@@ -350,6 +358,10 @@ defineExpose({ reload: loadLineage })
         <p class="modal-desc modal-warn">
           更换始迁祖后，世系视图将重新计算，原有的世次将改变。
         </p>
+        <!-- Action error in confirm modal -->
+        <div v-if="actionError" class="modal-error" role="alert">
+          {{ actionError }}
+        </div>
         <div class="form-actions">
           <button
             type="button"
@@ -378,6 +390,10 @@ defineExpose({ reload: loadLineage })
         <p class="modal-desc modal-warn">
           清除始迁祖后，世系视图将显示空状态，需要重新指定始迁祖。
         </p>
+        <!-- Action error in confirm modal -->
+        <div v-if="actionError" class="modal-error" role="alert">
+          {{ actionError }}
+        </div>
         <div class="form-actions">
           <button
             type="button"
@@ -655,6 +671,15 @@ defineExpose({ reload: loadLineage })
   background: #fff4e5;
   border-radius: 6px;
   color: #8a6d3b;
+}
+.modal-error {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  background: #fef0f0;
+  border: 1px solid #f5c6cb;
+  border-radius: 6px;
+  color: #c53030;
+  font-size: 14px;
 }
 .form-row {
   margin-bottom: 16px;
