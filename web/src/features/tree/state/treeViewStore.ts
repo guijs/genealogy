@@ -581,8 +581,29 @@ export const useTreeViewStore = defineStore('treeView', () => {
       return true
     } catch (e) {
       if (e instanceof AlreadyDissolvedException) {
-        showError('关系已解除')
-        return false
+        // 409: 服务端已解除，同步 stash 并刷新（防止本地 stash 丢失恢复入口）
+        const familyId = currentFamilyId.value
+        if (!dissolvedRelationshipsMap.value[familyId]) {
+          dissolvedRelationshipsMap.value[familyId] = []
+        }
+        const existing = dissolvedRelationshipsMap.value[familyId].find(
+          (r) => r.id === relationshipId,
+        )
+        if (!existing) {
+          dissolvedRelationshipsMap.value[familyId].push({
+            id: relationshipId,
+            parentId,
+            childId,
+            parentDisplayName,
+            childDisplayName,
+            subtype,
+            role,
+          })
+          saveDissolvedToStorage(dissolvedRelationshipsMap.value)
+        }
+        showSuccess('关系已解除')
+        await reloadGraph()
+        return true
       }
       if (e instanceof RelationshipApiError && e.status === 403) {
         showError('没有编辑权限')
