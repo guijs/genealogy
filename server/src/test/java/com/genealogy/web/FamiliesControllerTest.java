@@ -1,9 +1,15 @@
 package com.genealogy.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.genealogy.domain.person.Person;
+import com.genealogy.domain.projection.Gender;
+import com.genealogy.domain.projection.ProjectionPerson;
+import com.genealogy.store.PersonStore;
+import com.genealogy.store.ProjectionStore;
 import com.genealogy.support.BaseIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -11,6 +17,7 @@ import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -19,6 +26,12 @@ class FamiliesControllerTest extends BaseIntegrationTest {
     private static final UUID USER_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final UUID OTHER_USER_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final String AUTH_HEADER = "Authorization";
+
+    @Autowired
+    private PersonStore personStore;
+
+    @Autowired
+    private ProjectionStore projectionStore;
 
     @BeforeEach
     void setUp() {
@@ -264,5 +277,52 @@ class FamiliesControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.families.length()").value(1))
                 .andExpect(jsonPath("$.families[0].id").value(familyId))
                 .andExpect(jsonPath("$.families[0].name").value(familyName));
+    }
+
+    @Test
+    void listFamilies_withProgenitorSet_includesProgenitorPersonId() throws Exception {
+        MvcResult createResult = mockMvc.perform(post("/api/v1/families")
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"Progenitor Test Family\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String familyId = new ObjectMapper().readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+        UUID familyUUID = UUID.fromString(familyId);
+
+        UUID personId = UUID.randomUUID();
+        personStore.addPerson(new Person(personId, familyUUID, "Test", "Progenitor"));
+        projectionStore.createPerson(new ProjectionPerson(personId, familyUUID, "Test Progenitor", Gender.MALE, 1900, null, false));
+
+        mockMvc.perform(put("/api/v1/families/" + familyId + "/progenitor")
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"person_id\": \"" + personId + "\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/families")
+                        .header(AUTH_HEADER, bearerToken(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.families[0].id").value(familyId))
+                .andExpect(jsonPath("$.families[0].progenitor_person_id").value(personId.toString()));
+    }
+
+    @Test
+    void listFamilies_withoutProgenitorSet_progenitorPersonIdIsNull() throws Exception {
+        MvcResult createResult = mockMvc.perform(post("/api/v1/families")
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"No Progenitor Family\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String familyId = new ObjectMapper().readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+
+        mockMvc.perform(get("/api/v1/families")
+                        .header(AUTH_HEADER, bearerToken(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.families[0].id").value(familyId))
+                .andExpect(jsonPath("$.families[0].progenitor_person_id").isEmpty());
     }
 }
