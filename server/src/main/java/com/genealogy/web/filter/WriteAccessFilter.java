@@ -24,6 +24,12 @@ public class WriteAccessFilter extends OncePerRequestFilter {
     private static final Pattern RELATIONSHIPS_PATH_PATTERN = 
             Pattern.compile("^/api/v1/families/[^/]+/relationships$");
 
+    private static final Pattern RELATIONSHIPS_DISSOLVE_PATH_PATTERN = 
+            Pattern.compile("^/api/v1/families/[^/]+/relationships/[^/]+/dissolve$");
+
+    private static final Pattern RELATIONSHIPS_RESTORE_PATH_PATTERN = 
+            Pattern.compile("^/api/v1/families/[^/]+/relationships/[^/]+/restore$");
+
     private static final Pattern MEDIA_UPLOAD_URL_PATH_PATTERN = 
             Pattern.compile("^/api/v1/families/[^/]+/media/upload-url$");
 
@@ -79,6 +85,12 @@ public class WriteAccessFilter extends OncePerRequestFilter {
             return false;
         }
         if (RELATIONSHIPS_PATH_PATTERN.matcher(path).matches()) {
+            return true;
+        }
+        if ("POST".equals(method) && RELATIONSHIPS_DISSOLVE_PATH_PATTERN.matcher(path).matches()) {
+            return true;
+        }
+        if ("POST".equals(method) && RELATIONSHIPS_RESTORE_PATH_PATTERN.matcher(path).matches()) {
             return true;
         }
         if ("POST".equals(method) && PERSONS_POST_PATH_PATTERN.matcher(path).matches()) {

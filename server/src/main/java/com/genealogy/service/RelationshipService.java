@@ -1,5 +1,6 @@
 package com.genealogy.service;
 
+import com.genealogy.domain.kinship.KinshipException;
 import com.genealogy.domain.kinship.Relation;
 import com.genealogy.domain.kinship.RelationType;
 import com.genealogy.domain.person.Person;
@@ -8,12 +9,14 @@ import com.genealogy.domain.projection.ParentChildSubtype;
 import com.genealogy.domain.projection.ParentRole;
 import com.genealogy.domain.projection.ProjectionPerson;
 import com.genealogy.domain.projection.ProjectionRelationship;
+import com.genealogy.mapper.RelationshipMapper;
 import com.genealogy.store.KinshipStore;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -21,11 +24,19 @@ public class RelationshipService {
     private final PersonStore personStore;
     private final KinshipStore kinshipStore;
     private final ProjectionStore projectionStore;
+    private final RelationshipMapper relationshipMapper;
 
-    public RelationshipService(PersonStore personStore, KinshipStore kinshipStore, ProjectionStore projectionStore) {
+    public RelationshipService(PersonStore personStore, KinshipStore kinshipStore, 
+                               ProjectionStore projectionStore, RelationshipMapper relationshipMapper) {
         this.personStore = personStore;
         this.kinshipStore = kinshipStore;
         this.projectionStore = projectionStore;
+        this.relationshipMapper = relationshipMapper;
+    }
+
+    public Optional<ProjectionRelationship> getRelationship(UUID familyId, UUID relationshipId) {
+        ProjectionRelationship rel = relationshipMapper.findByIdAndFamilyId(relationshipId, familyId);
+        return Optional.ofNullable(rel);
     }
 
     @Transactional
@@ -112,9 +123,91 @@ public class RelationshipService {
         };
     }
 
+    @Transactional
+    public void dissolve(UUID familyId, UUID relationshipId) {
+        ProjectionRelationship rel = relationshipMapper.findByIdAndFamilyId(relationshipId, familyId);
+        if (rel == null) {
+            throw new RelationshipNotFoundException();
+        }
+        if (rel.isDissolved()) {
+            throw new AlreadyDissolvedException();
+        }
+
+        relationshipMapper.setDissolved(relationshipId, true);
+        kinshipStore.invalidateCache(familyId);
+    }
+
+    @Transactional
+    public void restore(UUID familyId, UUID relationshipId) {
+        ProjectionRelationship rel = relationshipMapper.findByIdAndFamilyId(relationshipId, familyId);
+        if (rel == null) {
+            throw new RelationshipNotFoundException();
+        }
+        if (!rel.isDissolved()) {
+            throw new NotDissolvedException();
+        }
+
+        RelationType relationType = mapToRelationType(rel.getSubtype(), rel.getRole());
+        if (relationType == null) {
+            throw new RestoreBlockedException("cannot determine relationship type");
+        }
+
+        Relation relation = new Relation(rel.getParentId(), rel.getChildId(), relationType);
+        try {
+            kinshipStore.getGraph(familyId).addRelation(relation);
+        } catch (KinshipException e) {
+            throw new RestoreBlockedException(e.getMessage());
+        }
+
+        relationshipMapper.setDissolved(relationshipId, false);
+        kinshipStore.invalidateCache(familyId);
+    }
+
+    private RelationType mapToRelationType(ParentChildSubtype subtype, ParentRole role) {
+        if (subtype == null || role == null) {
+            return null;
+        }
+        return switch (subtype) {
+            case BIOLOGICAL -> switch (role) {
+                case FATHER -> RelationType.BIOLOGICAL_FATHER;
+                case MOTHER -> RelationType.BIOLOGICAL_MOTHER;
+                case PARENT -> RelationType.BIOLOGICAL_FATHER;
+            };
+            case ADOPTIVE -> switch (role) {
+                case FATHER -> RelationType.ADOPTIVE_FATHER;
+                case MOTHER -> RelationType.ADOPTIVE_MOTHER;
+                case PARENT -> RelationType.ADOPTIVE_FATHER;
+            };
+        };
+    }
+
     public static class PersonNotInFamilyException extends RuntimeException {
         public PersonNotInFamilyException() {
             super("person does not belong to this family");
+        }
+    }
+
+    public static class RelationshipNotFoundException extends RuntimeException {
+        public RelationshipNotFoundException() {
+            super("relationship not found");
+        }
+    }
+
+    public static class AlreadyDissolvedException extends RuntimeException {
+        public AlreadyDissolvedException() {
+            super("relationship is already dissolved");
+        }
+    }
+
+    public static class NotDissolvedException extends RuntimeException {
+        public NotDissolvedException() {
+            super("relationship is not dissolved");
+        }
+    }
+
+    public static class RestoreBlockedException extends RuntimeException {
+        public RestoreBlockedException(String message) {
+            super(message);
         }
     }
 }
