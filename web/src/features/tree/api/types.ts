@@ -162,3 +162,27 @@ export interface AddRelationshipRequest {
 export interface AddRelationshipResponse {
   success: boolean
 }
+
+/**
+ * POST /api/v1/families/{familyId}/relationships/{id}/dissolve
+ * POST /api/v1/families/{familyId}/relationships/{id}/restore
+ * Response body: { id: string, dissolved: boolean }
+ */
+export interface DissolveRestoreResponse {
+  id: string
+  dissolved: boolean
+}
+
+/**
+ * 客户端缓存的已解除亲子关系信息（用于恢复面板）
+ * 因为 /graph 不返回已解除的关系，需要客户端本地存储
+ */
+export interface DissolvedRelationship {
+  id: string
+  parentId: string
+  childId: string
+  parentDisplayName: string
+  childDisplayName: string
+  subtype?: string
+  role?: string
+}

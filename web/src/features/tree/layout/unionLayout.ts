@@ -393,31 +393,33 @@ export function deriveKinForPerson(
   personId: string,
   projection: Pick<GraphProjection, 'persons' | 'marriages' | 'relationships'>,
 ): {
-  parents: { person: PersonDTO; role?: string; subtype?: string }[]
+  parents: { person: PersonDTO; role?: string; subtype?: string; relationshipId: string }[]
   spouses: { person: PersonDTO; status: MarriageStatus; marriageId: string }[]
-  children: { person: PersonDTO; role?: string; subtype?: string }[]
+  children: { person: PersonDTO; role?: string; subtype?: string; relationshipId: string }[]
 } {
   const byId = new Map(projection.persons.map((p) => [p.id, p]))
   const parents: {
     person: PersonDTO
     role?: string
     subtype?: string
+    relationshipId: string
   }[] = []
   const children: {
     person: PersonDTO
     role?: string
     subtype?: string
+    relationshipId: string
   }[] = []
 
   for (const r of projection.relationships) {
     if (r.type !== 'PARENT_CHILD') continue
     if (r.childId === personId) {
       const p = byId.get(r.parentId)
-      if (p) parents.push({ person: p, role: r.role, subtype: r.subtype })
+      if (p) parents.push({ person: p, role: r.role, subtype: r.subtype, relationshipId: r.id })
     }
     if (r.parentId === personId) {
       const c = byId.get(r.childId)
-      if (c) children.push({ person: c, role: r.role, subtype: r.subtype })
+      if (c) children.push({ person: c, role: r.role, subtype: r.subtype, relationshipId: r.id })
     }
   }
 

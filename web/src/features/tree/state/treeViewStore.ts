@@ -24,12 +24,41 @@ import {
   endUnion as apiEndUnion,
   UnionApiError,
 } from '../api/unionClient'
+import {
+  dissolveRelationship as apiDissolveRelationship,
+  restoreRelationship as apiRestoreRelationship,
+  RelationshipApiError,
+  AlreadyDissolvedException,
+  NotDissolvedException,
+  RestoreBlockedException,
+} from '../api/relationshipClient'
+import type { DissolvedRelationship } from '../api/types'
 import type { GraphProjection, PersonDTO } from '../api/types'
 import {
   deriveKinForPerson,
   deriveSiblingsForPerson,
   layoutUnionGraph,
 } from '../layout/unionLayout'
+
+const DISSOLVED_STORAGE_KEY = 'genealogy:dissolvedRelationships'
+
+function initDissolvedFromStorage(): Record<string, DissolvedRelationship[]> {
+  try {
+    const raw = localStorage.getItem(DISSOLVED_STORAGE_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {
+    // ignore parse errors
+  }
+  return {}
+}
+
+function saveDissolvedToStorage(map: Record<string, DissolvedRelationship[]>): void {
+  try {
+    localStorage.setItem(DISSOLVED_STORAGE_KEY, JSON.stringify(map))
+  } catch {
+    // ignore storage errors
+  }
+}
 
 export const useTreeViewStore = defineStore('treeView', () => {
   const graph = ref<GraphProjection | null>(null)
@@ -74,6 +103,8 @@ export const useTreeViewStore = defineStore('treeView', () => {
   const hiddenPersonCache = ref<PersonDTO | null>(null)
   /** 持久化的已隐藏人物列表，按 familyId 存储 {id, displayName} */
   const hiddenPersonsMap = ref<Record<string, Array<{ id: string; displayName: string }>>>({})
+  /** 持久化的已解除亲子关系列表，按 familyId 存储（localStorage 同步） */
+  const dissolvedRelationshipsMap = ref<Record<string, DissolvedRelationship[]>>(initDissolvedFromStorage())
 
   const layout = computed(() => {
     if (!graph.value) return null
@@ -117,6 +148,11 @@ export const useTreeViewStore = defineStore('treeView', () => {
   /** 当前家族的已隐藏人员列表 */
   const hiddenPersonsForCurrentFamily = computed(() => {
     return hiddenPersonsMap.value[currentFamilyId.value] ?? []
+  })
+
+  /** 当前家族的已解除亲子关系列表 */
+  const dissolvedRelationshipsForCurrentFamily = computed(() => {
+    return dissolvedRelationshipsMap.value[currentFamilyId.value] ?? []
   })
 
   /**
@@ -491,6 +527,137 @@ export const useTreeViewStore = defineStore('treeView', () => {
     }
   }
 
+  /**
+   * 解除亲子关系（AP-R14）
+   * 成功后缓存到 dissolvedRelationshipsMap，刷新 graph
+   * @param relationshipId 关系 ID
+   * @param parentId 父母 ID
+   * @param childId 子女 ID
+   * @param parentDisplayName 父母显示名
+   * @param childDisplayName 子女显示名
+   * @param subtype 关系子类型（biological/adoptive）
+   * @param role 角色（father/mother/parent）
+   */
+  async function dissolveParentChildRelationship(
+    relationshipId: string,
+    parentId: string,
+    childId: string,
+    parentDisplayName: string,
+    childDisplayName: string,
+    subtype?: string,
+    role?: string,
+  ): Promise<boolean> {
+    if (!usingGraphApi.value) {
+      showError('解除亲子关系需要连接真实 API（当前为 mock 模式）')
+      return false
+    }
+    clearMessages()
+    submitting.value = true
+    try {
+      await apiDissolveRelationship(currentFamilyId.value, relationshipId)
+
+      const familyId = currentFamilyId.value
+      if (!dissolvedRelationshipsMap.value[familyId]) {
+        dissolvedRelationshipsMap.value[familyId] = []
+      }
+      const existing = dissolvedRelationshipsMap.value[familyId].find(
+        (r) => r.id === relationshipId,
+      )
+      if (!existing) {
+        dissolvedRelationshipsMap.value[familyId].push({
+          id: relationshipId,
+          parentId,
+          childId,
+          parentDisplayName,
+          childDisplayName,
+          subtype,
+          role,
+        })
+        saveDissolvedToStorage(dissolvedRelationshipsMap.value)
+      }
+
+      showSuccess('亲子关系已解除')
+      await reloadGraph()
+      return true
+    } catch (e) {
+      if (e instanceof AlreadyDissolvedException) {
+        showError('关系已解除')
+        return false
+      }
+      if (e instanceof RelationshipApiError && e.status === 403) {
+        showError('没有编辑权限')
+        return false
+      }
+      const msg =
+        e instanceof RelationshipApiError ? e.message : '解除亲子关系失败'
+      showError(msg)
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  /**
+   * 恢复已解除的亲子关系（AP-R14）
+   * 成功后从 dissolvedRelationshipsMap 移除，刷新 graph
+   * @param relationshipId 关系 ID
+   */
+  async function restoreParentChildRelationship(
+    relationshipId: string,
+  ): Promise<boolean> {
+    if (!usingGraphApi.value) {
+      showError('恢复亲子关系需要连接真实 API（当前为 mock 模式）')
+      return false
+    }
+    clearMessages()
+    submitting.value = true
+    try {
+      await apiRestoreRelationship(currentFamilyId.value, relationshipId)
+
+      const familyId = currentFamilyId.value
+      if (dissolvedRelationshipsMap.value[familyId]) {
+        dissolvedRelationshipsMap.value[familyId] =
+          dissolvedRelationshipsMap.value[familyId].filter(
+            (r) => r.id !== relationshipId,
+          )
+        saveDissolvedToStorage(dissolvedRelationshipsMap.value)
+      }
+
+      showSuccess('亲子关系已恢复')
+      await reloadGraph()
+      return true
+    } catch (e) {
+      if (e instanceof NotDissolvedException) {
+        // 已恢复，同步 stash
+        const familyId = currentFamilyId.value
+        if (dissolvedRelationshipsMap.value[familyId]) {
+          dissolvedRelationshipsMap.value[familyId] =
+            dissolvedRelationshipsMap.value[familyId].filter(
+              (r) => r.id !== relationshipId,
+            )
+          saveDissolvedToStorage(dissolvedRelationshipsMap.value)
+        }
+        showSuccess('关系已恢复')
+        await reloadGraph()
+        return true
+      }
+      if (e instanceof RestoreBlockedException) {
+        showError(e.message)
+        return false
+      }
+      if (e instanceof RelationshipApiError && e.status === 403) {
+        showError('没有编辑权限')
+        return false
+      }
+      const msg =
+        e instanceof RelationshipApiError ? e.message : '恢复亲子关系失败'
+      showError(msg)
+      return false
+    } finally {
+      submitting.value = false
+    }
+  }
+
   function openAddSpouseForm() {
     addSpouseFormOpen.value = true
   }
@@ -631,6 +798,7 @@ export const useTreeViewStore = defineStore('treeView', () => {
     hideConfirmMessage,
     selectedPersonHidden,
     hiddenPersonsForCurrentFamily,
+    dissolvedRelationshipsForCurrentFamily,
     layout,
     selectedPerson,
     selectedKin,
@@ -654,6 +822,8 @@ export const useTreeViewStore = defineStore('treeView', () => {
     restorePerson,
     restorePersonFromPanel,
     refreshHiddenPersons,
+    dissolveParentChildRelationship,
+    restoreParentChildRelationship,
     openAddForm,
     closeAddForm,
     openAddSpouseForm,
