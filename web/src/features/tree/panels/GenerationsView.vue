@@ -50,8 +50,8 @@ const sortedGenerations = computed(() => {
 
 const focusedPersonId = computed(() => generations.value?.focusPersonId)
 
-function handlePersonClick(personId: string) {
-  store.selectPerson(personId)
+async function handlePersonClick(personId: string) {
+  await store.selectPersonWithFocus(personId)
 }
 
 onMounted(() => {

@@ -720,6 +720,30 @@ export const useTreeViewStore = defineStore('treeView', () => {
     hiddenPersonCache.value = null
   }
 
+  /**
+   * Check if a person is in the current graph window.
+   */
+  function isPersonInGraph(personId: string): boolean {
+    if (!graph.value) return false
+    return graph.value.persons.some((p) => p.id === personId)
+  }
+
+  /**
+   * Select a person, ensuring they are in the graph first.
+   * If person is outside current graph window (e.g., from generations view),
+   * re-center the graph on that person before opening drawer.
+   */
+  async function selectPersonWithFocus(personId: string): Promise<void> {
+    if (isPersonInGraph(personId)) {
+      selectPerson(personId)
+      return
+    }
+
+    setFocus(personId)
+    await reloadGraph()
+    selectPerson(personId)
+  }
+
   function closeDrawer() {
     drawerOpen.value = false
     selectedPersonHidden.value = false
@@ -830,6 +854,8 @@ export const useTreeViewStore = defineStore('treeView', () => {
     loadFamily,
     reloadGraph,
     selectPerson,
+    selectPersonWithFocus,
+    isPersonInGraph,
     closeDrawer,
     setFocus,
     addParentChild,
