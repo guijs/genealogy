@@ -290,7 +290,7 @@ async function handleDissolveChild(row: {
       <h3 class="section-title">兄弟姐妹</h3>
       <ul class="kin-list">
         <li v-for="sib in selectedSiblings" :key="sib.siblingId">
-          <span class="kin-label">{{ SIBLING_KIND_LABEL[sib.kind] }}</span>
+          <span class="kin-label">{{ SIBLING_KIND_LABEL[sib.kind] ?? sib.kind }}</span>
           <button
             v-if="sib.person"
             type="button"

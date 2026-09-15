@@ -443,8 +443,13 @@ describe('putUploadFile', () => {
     expect(url).toBe('https://api.example.com/api/v1/media/uploads/token123')
   })
 
-  it('throws PUT_CONTENT_TYPE_MISMATCH on 400', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 400, statusText: 'Bad Request' })
+  it('throws PUT_CONTENT_TYPE_MISMATCH on 400 with Content-Type error', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      json: () => Promise.resolve({ error: 'Content-Type mismatch: expected image/png' }),
+    })
     vi.stubGlobal('fetch', mockFetch)
 
     const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
@@ -459,6 +464,80 @@ describe('putUploadFile', () => {
     } catch (e) {
       expect((e as typeof MediaApiError.prototype).code).toBe('PUT_CONTENT_TYPE_MISMATCH')
       expect((e as typeof MediaApiError.prototype).status).toBe(400)
+    }
+  })
+
+  it('throws PUT_INVALID_PARAMS on 400 with non-Content-Type error', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      json: () => Promise.resolve({ error: 'file is empty' }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
+
+    const { putUploadFile, MediaApiError } = await import('./mediaClient')
+
+    await expect(putUploadFile('https://api.example.com/upload', file))
+      .rejects.toThrow('上传参数无效：file is empty')
+
+    try {
+      await putUploadFile('https://api.example.com/upload', file)
+    } catch (e) {
+      expect((e as typeof MediaApiError.prototype).code).toBe('PUT_INVALID_PARAMS')
+      expect((e as typeof MediaApiError.prototype).status).toBe(400)
+    }
+  })
+
+  it('throws PUT_INVALID_PARAMS on 400 with no parseable body', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      json: () => Promise.reject(new Error('not JSON')),
+      text: () => Promise.reject(new Error('no body')),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
+
+    const { putUploadFile, MediaApiError } = await import('./mediaClient')
+
+    await expect(putUploadFile('https://api.example.com/upload', file))
+      .rejects.toThrow('上传参数无效')
+
+    try {
+      await putUploadFile('https://api.example.com/upload', file)
+    } catch (e) {
+      expect((e as typeof MediaApiError.prototype).code).toBe('PUT_INVALID_PARAMS')
+      expect((e as typeof MediaApiError.prototype).status).toBe(400)
+      expect((e as typeof MediaApiError.prototype).message).toBe('上传参数无效')
+    }
+  })
+
+  it('throws PUT_INVALID_PARAMS on 400 with missing Content-Length text', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      json: () => Promise.reject(new Error('not JSON')),
+      text: () => Promise.resolve('Missing Content-Length header'),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
+
+    const { putUploadFile, MediaApiError } = await import('./mediaClient')
+
+    await expect(putUploadFile('https://api.example.com/upload', file))
+      .rejects.toThrow('上传参数无效：Missing Content-Length header')
+
+    try {
+      await putUploadFile('https://api.example.com/upload', file)
+    } catch (e) {
+      expect((e as typeof MediaApiError.prototype).code).toBe('PUT_INVALID_PARAMS')
     }
   })
 

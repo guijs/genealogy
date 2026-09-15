@@ -46,6 +46,7 @@ export type MediaValidationErrorCode =
   | 'AUTH_MISSING'
   | 'MOCK_MODE'
   | 'PUT_CONTENT_TYPE_MISMATCH'
+  | 'PUT_INVALID_PARAMS'
   | 'PUT_INVALID_TOKEN'
   | 'PUT_OVERSIZED'
   | 'PUT_NETWORK_ERROR'
@@ -107,6 +108,13 @@ export class MediaApiError extends Error {
       400,
       'PUT_CONTENT_TYPE_MISMATCH',
     )
+  }
+
+  static putInvalidParams(serverError?: string): MediaApiError {
+    const message = serverError
+      ? `上传参数无效：${serverError}`
+      : '上传参数无效'
+    return new MediaApiError(message, 400, 'PUT_INVALID_PARAMS')
   }
 
   static putInvalidToken(): MediaApiError {
@@ -304,8 +312,29 @@ export async function putUploadFile(
   }
 
   switch (res.status) {
-    case 400:
-      throw MediaApiError.putContentTypeMismatch()
+    case 400: {
+      let serverError: string | undefined
+      try {
+        const body = await res.json()
+        if (body && typeof body.error === 'string') {
+          serverError = body.error
+        }
+      } catch {
+        // JSON parse failed, try text
+        try {
+          const text = await res.text()
+          if (text) {
+            serverError = text
+          }
+        } catch {
+          // ignore
+        }
+      }
+      if (serverError && /content.?type/i.test(serverError)) {
+        throw MediaApiError.putContentTypeMismatch()
+      }
+      throw MediaApiError.putInvalidParams(serverError)
+    }
     case 401:
       throw MediaApiError.putInvalidToken()
     case 413:
