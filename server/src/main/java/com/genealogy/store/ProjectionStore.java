@@ -29,6 +29,11 @@ public class ProjectionStore {
         return p != null ? Optional.of(p.copy()) : Optional.empty();
     }
 
+    public Optional<ProjectionPerson> getEarliestNonHiddenPerson(UUID familyId) {
+        ProjectionPerson p = personMapper.findEarliestNonHiddenByFamilyId(familyId);
+        return p != null ? Optional.of(p.copy()) : Optional.empty();
+    }
+
     public List<ProjectionPerson> getPersonsByFamily(UUID familyId) {
         return personMapper.findProjectionsByFamilyId(familyId);
     }

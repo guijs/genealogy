@@ -70,6 +70,19 @@ public class GraphController {
         }
     }
 
+    /**
+     * GET /generations - Ego-relative generation layers.
+     * 
+     * focusPersonId is optional:
+     * - If provided and valid in family: use as Ego
+     * - If omitted/empty: fallback to earliest created non-hidden person in family
+     * - If family has zero non-hidden persons: 404 with "no persons in family"
+     * 
+     * Client selection strategy (documented, not enforced by API):
+     * - "本人节点" (self node) if user has one
+     * - "会话上次焦点" (session's last focus) if available
+     * - Otherwise omit and let backend resolve to earliest person
+     */
     @GetMapping("/generations")
     public ResponseEntity<?> getGenerations(HttpServletRequest request,
                                             @RequestParam(required = false) String focusPersonId) {
@@ -78,15 +91,13 @@ public class GraphController {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         }
 
-        if (focusPersonId == null || focusPersonId.isEmpty()) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("focusPersonId query parameter required"));
-        }
-
-        UUID focusPersonUUID;
-        try {
-            focusPersonUUID = UUID.fromString(focusPersonId);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("invalid focusPersonId"));
+        UUID focusPersonUUID = null;
+        if (focusPersonId != null && !focusPersonId.isEmpty()) {
+            try {
+                focusPersonUUID = UUID.fromString(focusPersonId);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(new ErrorResponse("invalid focusPersonId"));
+            }
         }
 
         try {
@@ -94,6 +105,8 @@ public class GraphController {
             return ResponseEntity.ok(generations);
         } catch (GenerationsService.PersonNotInFamilyException e) {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        } catch (GenerationsService.NoPersonsInFamilyException e) {
+            return ResponseEntity.status(404).body(new ErrorResponse("no persons in family"));
         }
     }
 }

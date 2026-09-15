@@ -61,11 +61,54 @@ class GenerationsControllerTest extends BaseIntegrationTest {
     }
 
     @Test
-    void getGenerations_withoutFocusPersonId_returns400() throws Exception {
+    void getGenerations_omitFocusPersonId_resolvesToEarliestPerson_APG11() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/generations")
                         .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("focusPersonId query parameter required"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.focusPersonId").value(EGO_ID.toString()))
+                .andExpect(jsonPath("$.generations[0].index").value(0))
+                .andExpect(jsonPath("$.generations[0].persons[0].id").value(EGO_ID.toString()));
+    }
+
+    @Test
+    void getGenerations_omitFocusPersonId_multiplePersons_resolvesToEarliestByCreatedAt() throws Exception {
+        UUID laterId = UUID.randomUUID();
+        projectionStore.createPerson(new ProjectionPerson(
+                laterId, FAMILY_ID, "Later Person", Gender.FEMALE, 2000, null, false));
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/generations")
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.focusPersonId").value(EGO_ID.toString()))
+                .andExpect(jsonPath("$.generations[0].persons[0].id").value(EGO_ID.toString()));
+    }
+
+    @Test
+    void getGenerations_omitFocusPersonId_onlyHiddenPersons_returns404() throws Exception {
+        cleanAllData();
+        familyStore.createFamily(FAMILY_ID, FAMILY_NAME);
+        familyStore.addMemberWithRole(FAMILY_ID, MEMBER_USER_ID, Role.ADMIN);
+
+        UUID hiddenPersonId = UUID.randomUUID();
+        projectionStore.createPerson(new ProjectionPerson(
+                hiddenPersonId, FAMILY_ID, "Hidden Person", Gender.MALE, 1990, null, true));
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/generations")
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("no persons in family"));
+    }
+
+    @Test
+    void getGenerations_noPersonsInFamily_returns404() throws Exception {
+        UUID emptyFamilyId = UUID.randomUUID();
+        familyStore.createFamily(emptyFamilyId, "Empty Family");
+        familyStore.addMemberWithRole(emptyFamilyId, MEMBER_USER_ID, Role.ADMIN);
+
+        mockMvc.perform(get("/api/v1/families/" + emptyFamilyId + "/generations")
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("no persons in family"));
     }
 
     @Test

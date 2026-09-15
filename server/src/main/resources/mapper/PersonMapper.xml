@@ -67,6 +67,14 @@
         SELECT COUNT(*) FROM persons WHERE family_id = #{familyId}
     </select>
 
+    <select id="findEarliestNonHiddenByFamilyId" resultMap="projectionPersonResultMap">
+        SELECT id, family_id, display_name, gender, birth_year, death_year, hidden
+        FROM persons
+        WHERE family_id = #{familyId} AND hidden = FALSE
+        ORDER BY created_at ASC, id ASC
+        LIMIT 1
+    </select>
+
     <delete id="deleteAll">
         DELETE FROM persons
     </delete>

@@ -39,25 +39,46 @@ public class GenerationsService {
         }
     }
 
+    public static class NoPersonsInFamilyException extends RuntimeException {
+        public NoPersonsInFamilyException() {
+            super("no persons in family");
+        }
+    }
+
+    /**
+     * Get generations projection with optional focusPersonId.
+     * If focusPersonId is null, falls back to earliest created non-hidden person in family.
+     */
     public GenerationsProjectionResponse getGenerations(UUID familyId, UUID focusPersonId) {
-        Optional<ProjectionPerson> focusOpt = projectionStore.getPerson(focusPersonId);
-        if (focusOpt.isEmpty() || !focusOpt.get().getFamilyId().equals(familyId)) {
-            throw new PersonNotInFamilyException();
+        ProjectionPerson focusPerson;
+
+        if (focusPersonId != null) {
+            Optional<ProjectionPerson> focusOpt = projectionStore.getPerson(focusPersonId);
+            if (focusOpt.isEmpty() || !focusOpt.get().getFamilyId().equals(familyId)) {
+                throw new PersonNotInFamilyException();
+            }
+            focusPerson = focusOpt.get();
+            if (focusPerson.isHidden()) {
+                throw new PersonNotInFamilyException();
+            }
+        } else {
+            Optional<ProjectionPerson> earliestOpt = projectionStore.getEarliestNonHiddenPerson(familyId);
+            if (earliestOpt.isEmpty()) {
+                throw new NoPersonsInFamilyException();
+            }
+            focusPerson = earliestOpt.get();
         }
 
-        ProjectionPerson focusPerson = focusOpt.get();
-        if (focusPerson.isHidden()) {
-            throw new PersonNotInFamilyException();
-        }
+        UUID resolvedFocusId = focusPerson.getId();
 
         Map<UUID, Integer> personToIndex = new HashMap<>();
         Set<UUID> conflictPersons = new HashSet<>();
         Map<UUID, ProjectionPerson> visitedPersons = new HashMap<>();
 
         Queue<BfsEntry> queue = new LinkedList<>();
-        queue.add(new BfsEntry(focusPersonId, 0));
-        personToIndex.put(focusPersonId, 0);
-        visitedPersons.put(focusPersonId, focusPerson);
+        queue.add(new BfsEntry(resolvedFocusId, 0));
+        personToIndex.put(resolvedFocusId, 0);
+        visitedPersons.put(resolvedFocusId, focusPerson);
 
         while (!queue.isEmpty()) {
             BfsEntry entry = queue.poll();
@@ -159,7 +180,7 @@ public class GenerationsService {
 
         return new GenerationsProjectionResponse(
                 familyId.toString(),
-                focusPersonId.toString(),
+                resolvedFocusId.toString(),
                 generations
         );
     }
