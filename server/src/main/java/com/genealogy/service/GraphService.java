@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 @Service
 public class GraphService {
@@ -50,6 +51,7 @@ public class GraphService {
         List<PersonDTO> personDTOs = buildPersonDTOs(persons);
         List<MarriageDTO> marriageDTOs = buildMarriageDTOs(marriages, persons);
         List<RelationshipDTO> relationshipDTOs = buildRelationshipDTOs(relationships);
+        List<DerivedSiblingDTO> siblingDTOs = deriveSiblings(relationships, persons);
 
         String truncateReason = truncated.get() ? TRUNCATE_REASON : null;
 
@@ -61,7 +63,8 @@ public class GraphService {
                 truncateReason,
                 personDTOs,
                 marriageDTOs,
-                relationshipDTOs
+                relationshipDTOs,
+                siblingDTOs
         );
     }
 
@@ -227,5 +230,169 @@ public class GraphService {
             ));
         }
         return dtos;
+    }
+
+    /**
+     * Derive sibling relationships from biological parent edges.
+     * P0 derivation rules:
+     * - Only biological parent edges (not adoptive)
+     * - Dissolved edges do not participate
+     * - Hidden persons are excluded
+     * - Share both biological parents → full sibling
+     * - Share only biological father → paternal_half
+     * - Share only biological mother → maternal_half
+     * - Pairs are emitted once with canonicalized IDs (personId < siblingId)
+     */
+    private List<DerivedSiblingDTO> deriveSiblings(Map<UUID, ProjectionRelationship> relationships,
+                                                    Map<UUID, ProjectionPerson> persons) {
+        Map<UUID, Set<UUID>> bioFathers = new HashMap<>();
+        Map<UUID, Set<UUID>> bioMothers = new HashMap<>();
+
+        for (ProjectionRelationship r : relationships.values()) {
+            if (r.isDissolved()) {
+                continue;
+            }
+            if (r.getSubtype() != ParentChildSubtype.BIOLOGICAL) {
+                continue;
+            }
+
+            UUID childId = r.getChildId();
+            UUID parentId = r.getParentId();
+
+            ProjectionPerson child = persons.get(childId);
+            ProjectionPerson parent = persons.get(parentId);
+            if (child == null || parent == null) {
+                continue;
+            }
+            if (child.isHidden() || parent.isHidden()) {
+                continue;
+            }
+
+            ParentRole role = r.getRole();
+            if (role == ParentRole.FATHER) {
+                bioFathers.computeIfAbsent(childId, k -> new HashSet<>()).add(parentId);
+            } else if (role == ParentRole.MOTHER) {
+                bioMothers.computeIfAbsent(childId, k -> new HashSet<>()).add(parentId);
+            }
+        }
+
+        Map<UUID, Set<UUID>> childrenOfFather = new HashMap<>();
+        for (Map.Entry<UUID, Set<UUID>> entry : bioFathers.entrySet()) {
+            UUID childId = entry.getKey();
+            for (UUID fatherId : entry.getValue()) {
+                childrenOfFather.computeIfAbsent(fatherId, k -> new HashSet<>()).add(childId);
+            }
+        }
+
+        Map<UUID, Set<UUID>> childrenOfMother = new HashMap<>();
+        for (Map.Entry<UUID, Set<UUID>> entry : bioMothers.entrySet()) {
+            UUID childId = entry.getKey();
+            for (UUID motherId : entry.getValue()) {
+                childrenOfMother.computeIfAbsent(motherId, k -> new HashSet<>()).add(childId);
+            }
+        }
+
+        Set<String> processedPairs = new HashSet<>();
+        List<DerivedSiblingDTO> siblings = new ArrayList<>();
+
+        Set<UUID> visiblePersonIds = persons.values().stream()
+                .filter(p -> !p.isHidden())
+                .map(ProjectionPerson::getId)
+                .collect(Collectors.toSet());
+
+        for (UUID personId : visiblePersonIds) {
+            Set<UUID> sharedFatherSiblings = new HashSet<>();
+            Set<UUID> sharedMotherSiblings = new HashSet<>();
+            Set<UUID> fatherIds = bioFathers.getOrDefault(personId, Collections.emptySet());
+            Set<UUID> motherIds = bioMothers.getOrDefault(personId, Collections.emptySet());
+
+            for (UUID fatherId : fatherIds) {
+                Set<UUID> fatherChildren = childrenOfFather.getOrDefault(fatherId, Collections.emptySet());
+                for (UUID siblingId : fatherChildren) {
+                    if (!siblingId.equals(personId) && visiblePersonIds.contains(siblingId)) {
+                        sharedFatherSiblings.add(siblingId);
+                    }
+                }
+            }
+
+            for (UUID motherId : motherIds) {
+                Set<UUID> motherChildren = childrenOfMother.getOrDefault(motherId, Collections.emptySet());
+                for (UUID siblingId : motherChildren) {
+                    if (!siblingId.equals(personId) && visiblePersonIds.contains(siblingId)) {
+                        sharedMotherSiblings.add(siblingId);
+                    }
+                }
+            }
+
+            Set<UUID> allSiblings = new HashSet<>();
+            allSiblings.addAll(sharedFatherSiblings);
+            allSiblings.addAll(sharedMotherSiblings);
+
+            for (UUID siblingId : allSiblings) {
+                String pairKey = canonicalizePair(personId, siblingId);
+                if (processedPairs.contains(pairKey)) {
+                    continue;
+                }
+                processedPairs.add(pairKey);
+
+                boolean sharesFather = sharedFatherSiblings.contains(siblingId);
+                boolean sharesMother = sharedMotherSiblings.contains(siblingId);
+
+                DerivedSiblingDTO.SiblingKind kind;
+                List<String> sharedParentIds = new ArrayList<>();
+
+                if (sharesFather && sharesMother) {
+                    kind = DerivedSiblingDTO.SiblingKind.full;
+                    Set<UUID> personFatherSet = bioFathers.getOrDefault(personId, Collections.emptySet());
+                    Set<UUID> siblingFatherSet = bioFathers.getOrDefault(siblingId, Collections.emptySet());
+                    Set<UUID> commonFathers = new HashSet<>(personFatherSet);
+                    commonFathers.retainAll(siblingFatherSet);
+                    for (UUID fid : commonFathers) {
+                        sharedParentIds.add(fid.toString());
+                    }
+
+                    Set<UUID> personMotherSet = bioMothers.getOrDefault(personId, Collections.emptySet());
+                    Set<UUID> siblingMotherSet = bioMothers.getOrDefault(siblingId, Collections.emptySet());
+                    Set<UUID> commonMothers = new HashSet<>(personMotherSet);
+                    commonMothers.retainAll(siblingMotherSet);
+                    for (UUID mid : commonMothers) {
+                        sharedParentIds.add(mid.toString());
+                    }
+                } else if (sharesFather) {
+                    kind = DerivedSiblingDTO.SiblingKind.paternal_half;
+                    Set<UUID> personFatherSet = bioFathers.getOrDefault(personId, Collections.emptySet());
+                    Set<UUID> siblingFatherSet = bioFathers.getOrDefault(siblingId, Collections.emptySet());
+                    Set<UUID> commonFathers = new HashSet<>(personFatherSet);
+                    commonFathers.retainAll(siblingFatherSet);
+                    for (UUID fid : commonFathers) {
+                        sharedParentIds.add(fid.toString());
+                    }
+                } else {
+                    kind = DerivedSiblingDTO.SiblingKind.maternal_half;
+                    Set<UUID> personMotherSet = bioMothers.getOrDefault(personId, Collections.emptySet());
+                    Set<UUID> siblingMotherSet = bioMothers.getOrDefault(siblingId, Collections.emptySet());
+                    Set<UUID> commonMothers = new HashSet<>(personMotherSet);
+                    commonMothers.retainAll(siblingMotherSet);
+                    for (UUID mid : commonMothers) {
+                        sharedParentIds.add(mid.toString());
+                    }
+                }
+
+                String[] canonicalIds = pairKey.split(":");
+                siblings.add(new DerivedSiblingDTO(canonicalIds[0], canonicalIds[1], kind, sharedParentIds));
+            }
+        }
+
+        return siblings;
+    }
+
+    private String canonicalizePair(UUID id1, UUID id2) {
+        String s1 = id1.toString();
+        String s2 = id2.toString();
+        if (s1.compareTo(s2) < 0) {
+            return s1 + ":" + s2;
+        } else {
+            return s2 + ":" + s1;
+        }
     }
 }

@@ -14,11 +14,20 @@ public class GraphProjectionResponse {
     private final List<PersonDTO> persons;
     private final List<MarriageDTO> marriages;
     private final List<RelationshipDTO> relationships;
+    private final List<DerivedSiblingDTO> siblings;
 
     public GraphProjectionResponse(String familyId, String rootPersonId, int depth,
                                    boolean truncated, String truncateReason,
                                    List<PersonDTO> persons, List<MarriageDTO> marriages,
                                    List<RelationshipDTO> relationships) {
+        this(familyId, rootPersonId, depth, truncated, truncateReason, persons, marriages, relationships, null);
+    }
+
+    public GraphProjectionResponse(String familyId, String rootPersonId, int depth,
+                                   boolean truncated, String truncateReason,
+                                   List<PersonDTO> persons, List<MarriageDTO> marriages,
+                                   List<RelationshipDTO> relationships,
+                                   List<DerivedSiblingDTO> siblings) {
         this.familyId = familyId;
         this.rootPersonId = rootPersonId;
         this.depth = depth;
@@ -27,6 +36,7 @@ public class GraphProjectionResponse {
         this.persons = persons;
         this.marriages = marriages;
         this.relationships = relationships;
+        this.siblings = siblings;
     }
 
     public String getFamilyId() {
@@ -59,5 +69,9 @@ public class GraphProjectionResponse {
 
     public List<RelationshipDTO> getRelationships() {
         return relationships;
+    }
+
+    public List<DerivedSiblingDTO> getSiblings() {
+        return siblings;
     }
 }
