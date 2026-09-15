@@ -15,6 +15,7 @@ import org.springframework.http.MediaType;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -368,5 +369,90 @@ class LineageControllerTest extends BaseIntegrationTest {
 
         org.assertj.core.api.Assertions.assertThat(response)
                 .doesNotContain(HIDDEN_PERSON_ID.toString());
+    }
+
+    @Test
+    void hideProgenitor_clearsProgenitorFk() throws Exception {
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/progenitor")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"person_id\":\"" + PROGENITOR_ID + "\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID)
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.progenitor_person_id").value(PROGENITOR_ID.toString()));
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PROGENITOR_ID + "/hide")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID)
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.progenitor_person_id").isEmpty());
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/lineage")
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.progenitor_person_id").isEmpty())
+                .andExpect(jsonPath("$.generations").isArray())
+                .andExpect(jsonPath("$.generations.length()").value(0));
+    }
+
+    @Test
+    void hideNonProgenitor_progenitorFkUnchanged() throws Exception {
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/progenitor")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"person_id\":\"" + PROGENITOR_ID + "\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + CHILD1_ID + "/hide")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID)
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.progenitor_person_id").value(PROGENITOR_ID.toString()));
+    }
+
+    @Test
+    void restoreHiddenProgenitor_progenitorStaysNull() throws Exception {
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/progenitor")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"person_id\":\"" + PROGENITOR_ID + "\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PROGENITOR_ID + "/hide")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID)
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.progenitor_person_id").isEmpty());
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/persons/" + PROGENITOR_ID + "/restore")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID)
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.progenitor_person_id").isEmpty());
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/lineage")
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.progenitor_person_id").isEmpty())
+                .andExpect(jsonPath("$.generations.length()").value(0));
     }
 }
