@@ -20,6 +20,25 @@ export type ParentChildSubtype = 'biological' | 'adoptive'
 
 export type ParentRole = 'father' | 'mother' | 'parent'
 
+/** Sibling kind for derived sibling relationships */
+export type SiblingKind = 'full' | 'paternal_half' | 'maternal_half'
+
+/**
+ * Derived sibling relationship.
+ * Siblings are derived-only (never a writable fact) based on shared biological parents.
+ * P0 derivation uses only biological parent edges (biological_father / biological_mother).
+ * - Share both biological parents → full
+ * - Share only biological father → paternal_half
+ * - Share only biological mother → maternal_half
+ * Pairs are emitted once with canonicalized IDs (personId < siblingId lexicographically).
+ */
+export interface DerivedSibling {
+  personId: string
+  siblingId: string
+  kind: SiblingKind
+  sharedParentIds: string[]
+}
+
 export interface PersonDTO {
   id: string
   displayName: string
@@ -69,6 +88,11 @@ export interface GraphProjection {
   /** 含存续与已结束婚姻；离婚不删边 */
   marriages: MarriageDTO[]
   relationships: RelationshipDTO[]
+  /**
+   * Derived sibling pairs based on shared biological parents (AP-R9).
+   * Optional; omitted when empty or null.
+   */
+  siblings?: DerivedSibling[]
 }
 
 /** 布局中间态：一段配偶或单亲虚拟 union */
