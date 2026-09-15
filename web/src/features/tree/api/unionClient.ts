@@ -27,15 +27,14 @@ export interface EndUnionRequest {
   ended_at?: string | null
 }
 
-/** Union API 响应 (camelCase from server) */
+/** Union API 响应 (snake_case from server) */
 export interface UnionResponse {
   id: string
-  partnerAId: string
-  partnerBId: string
+  partner_ids: [string, string]
   status: string
-  startedAt?: string | null
-  endedAt?: string | null
-  endedReason?: string | null
+  started_at?: string | null
+  ended_at?: string | null
+  ended_reason?: string | null
 }
 
 export class UnionApiError extends Error {
