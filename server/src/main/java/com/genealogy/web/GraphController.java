@@ -1,7 +1,9 @@
 package com.genealogy.web;
 
+import com.genealogy.service.GenerationsService;
 import com.genealogy.service.GraphService;
 import com.genealogy.web.dto.ErrorResponse;
+import com.genealogy.web.dto.GenerationsProjectionResponse;
 import com.genealogy.web.dto.GraphProjectionResponse;
 import com.genealogy.web.filter.FamilyMembershipFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,9 +20,11 @@ import java.util.UUID;
 public class GraphController {
 
     private final GraphService graphService;
+    private final GenerationsService generationsService;
 
-    public GraphController(GraphService graphService) {
+    public GraphController(GraphService graphService, GenerationsService generationsService) {
         this.graphService = graphService;
+        this.generationsService = generationsService;
     }
 
     @GetMapping("/graph")
@@ -62,6 +66,33 @@ public class GraphController {
             GraphProjectionResponse graph = graphService.getGraph(familyId, rootPersonUUID, depthValue);
             return ResponseEntity.ok(graph);
         } catch (GraphService.PersonNotInFamilyException e) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+    }
+
+    @GetMapping("/generations")
+    public ResponseEntity<?> getGenerations(HttpServletRequest request,
+                                            @RequestParam(required = false) String focusPersonId) {
+        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
+        if (familyId == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        if (focusPersonId == null || focusPersonId.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("focusPersonId query parameter required"));
+        }
+
+        UUID focusPersonUUID;
+        try {
+            focusPersonUUID = UUID.fromString(focusPersonId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("invalid focusPersonId"));
+        }
+
+        try {
+            GenerationsProjectionResponse generations = generationsService.getGenerations(familyId, focusPersonUUID);
+            return ResponseEntity.ok(generations);
+        } catch (GenerationsService.PersonNotInFamilyException e) {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         }
     }
