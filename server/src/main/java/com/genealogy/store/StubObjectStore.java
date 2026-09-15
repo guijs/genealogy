@@ -1,8 +1,10 @@
 package com.genealogy.store;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(name = "media.storage", havingValue = "stub")
 public class StubObjectStore implements ObjectStore {
 
     @Override

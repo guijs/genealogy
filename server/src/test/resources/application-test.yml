@@ -18,3 +18,10 @@ mybatis:
 jwt:
   secret: test-secret-key-for-jwt-token-generation-min-32-chars
   expiration-hours: 24
+
+media:
+  storage: local
+  upload-secret: test-upload-secret-key-for-hmac-min-32-chars
+  upload-token-expiry-minutes: 15
+  local:
+    root: ${java.io.tmpdir}/genealogy-test-media
