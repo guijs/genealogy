@@ -1,18 +1,20 @@
 /**
  * Media Upload API client（B4）
  *
- * - POST /api/v1/families/{familyId}/media/upload-url — 获取预签名上传 URL
+ * 两步上传流程：
+ * 1. POST /api/v1/families/{familyId}/media/upload-url — 获取预签名上传 URL
+ * 2. PUT  /api/v1/media/uploads/{token}              — 实际上传文件
  *
  * 硬约束：
- * - Body snake_case：{ mime_type, file_size } — 绝不发送 storage_key（服务器会拒绝）
+ * - POST Body snake_case：{ mime_type, file_size } — 绝不发送 storage_key（服务器会拒绝）
+ * - PUT 请求不带 Authorization 头 — 认证在 HMAC token 中
  * - 客户端预检 MIME：仅 jpeg/png/webp
  * - 客户端预检大小：>0 且 ≤5MB
  * - 仅在真 API 模式下可用（VITE_USE_GRAPH_API / VITE_GRAPH_API_BASE）
- * - 认证：Authorization: Bearer <token>
- * - 响应 { upload_url, storage_key }；调方需显示两者
+ * - POST 需要 Authorization: Bearer <token>
+ * - POST 响应 { upload_url, storage_key }
  * - Mock 模式下不可伪造成功
  * - 不含整树写回
- * - Real PUT to upload_url 是可选的
  */
 import { isUsingGraphApi } from './graphClient'
 import { getAuthHeadersWithContentType, AuthRequiredError } from './auth'
@@ -43,6 +45,11 @@ export type MediaValidationErrorCode =
   | 'FILE_EMPTY'
   | 'AUTH_MISSING'
   | 'MOCK_MODE'
+  | 'PUT_CONTENT_TYPE_MISMATCH'
+  | 'PUT_INVALID_TOKEN'
+  | 'PUT_OVERSIZED'
+  | 'PUT_NETWORK_ERROR'
+  | 'PUT_SERVER_ERROR'
 
 export class MediaApiError extends Error {
   readonly status: number
@@ -91,6 +98,46 @@ export class MediaApiError extends Error {
       '文件不能为空',
       0,
       'FILE_EMPTY',
+    )
+  }
+
+  static putContentTypeMismatch(): MediaApiError {
+    return new MediaApiError(
+      '文件类型不匹配：请确保上传的文件类型与申请时一致',
+      400,
+      'PUT_CONTENT_TYPE_MISMATCH',
+    )
+  }
+
+  static putInvalidToken(): MediaApiError {
+    return new MediaApiError(
+      '上传链接无效或已过期，请重新获取',
+      401,
+      'PUT_INVALID_TOKEN',
+    )
+  }
+
+  static putOversized(): MediaApiError {
+    return new MediaApiError(
+      '文件过大，超出服务器限制',
+      413,
+      'PUT_OVERSIZED',
+    )
+  }
+
+  static putNetworkError(detail?: string): MediaApiError {
+    return new MediaApiError(
+      detail ? `网络错误：${detail}` : '网络错误，请检查网络连接后重试',
+      0,
+      'PUT_NETWORK_ERROR',
+    )
+  }
+
+  static putServerError(status: number): MediaApiError {
+    return new MediaApiError(
+      `服务器错误 (${status})，请稍后重试`,
+      status,
+      'PUT_SERVER_ERROR',
     )
   }
 }
@@ -195,27 +242,86 @@ export async function requestUploadUrl(
 }
 
 /**
- * 上传文件到预签名 URL（可选）
- *
- * @param uploadUrl - 从 requestUploadUrl 获取的预签名 URL
- * @param file - 要上传的文件 Blob
- * @param mimeType - 文件 MIME 类型
- * @throws Error 上传失败
+ * 解析上传 URL，处理相对路径
+ * 如果 uploadUrl 是相对路径，基于 VITE_GRAPH_API_BASE 解析
  */
-export async function uploadToPresignedUrl(
-  uploadUrl: string,
-  file: Blob,
-  mimeType: string,
-): Promise<void> {
-  const res = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': mimeType,
-    },
-    body: file,
-  })
+function resolveUploadUrl(uploadUrl: string): string {
+  if (uploadUrl.startsWith('http://') || uploadUrl.startsWith('https://')) {
+    return uploadUrl
+  }
+  const base = apiBase()
+  if (!base) {
+    return uploadUrl
+  }
+  if (uploadUrl.startsWith('/')) {
+    return `${base}${uploadUrl}`
+  }
+  return `${base}/${uploadUrl}`
+}
 
-  if (!res.ok) {
-    throw new Error(`上传失败: ${res.status} ${res.statusText}`)
+/**
+ * PUT 上传文件到预签名 URL
+ *
+ * PUT /api/v1/media/uploads/{token}
+ *
+ * 特点：
+ * - 不带 Authorization 头 — 认证在 HMAC token 中
+ * - Content-Type 必须与申请时的 mime_type 完全匹配
+ * - 浏览器自动设置 Content-Length
+ *
+ * @param uploadUrl - 从 requestUploadUrl 获取的 upload_url
+ * @param file - 要上传的文件（File 或 Blob）
+ * @returns Promise<void> 成功时返回
+ * @throws MediaApiError
+ *   - PUT_CONTENT_TYPE_MISMATCH (400) - Content-Type 不匹配
+ *   - PUT_INVALID_TOKEN (401) - token 无效或过期
+ *   - PUT_OVERSIZED (413) - 文件超大
+ *   - PUT_SERVER_ERROR (5xx) - 服务器错误
+ *   - PUT_NETWORK_ERROR - 网络错误
+ */
+export async function putUploadFile(
+  uploadUrl: string,
+  file: File | Blob,
+): Promise<void> {
+  const resolvedUrl = resolveUploadUrl(uploadUrl)
+
+  let res: Response
+  try {
+    res = await fetch(resolvedUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type,
+      },
+      body: file,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw MediaApiError.putNetworkError(message)
+  }
+
+  if (res.ok) {
+    return
+  }
+
+  switch (res.status) {
+    case 400:
+      throw MediaApiError.putContentTypeMismatch()
+    case 401:
+      throw MediaApiError.putInvalidToken()
+    case 413:
+      throw MediaApiError.putOversized()
+    default:
+      if (res.status >= 500) {
+        throw MediaApiError.putServerError(res.status)
+      }
+      throw new MediaApiError(
+        `上传失败: ${res.status} ${res.statusText}`,
+        res.status,
+      )
   }
 }
+
+/**
+ * @deprecated 使用 putUploadFile 替代
+ */
+export const uploadToPresignedUrl = putUploadFile

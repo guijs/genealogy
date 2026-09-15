@@ -400,3 +400,155 @@ describe('response handling', () => {
       .rejects.toThrow('无权限上传')
   })
 })
+
+describe('putUploadFile', () => {
+  beforeEach(() => {
+    import.meta.env.VITE_GRAPH_API_BASE = 'https://api.example.com'
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('sends PUT request with Content-Type header and no Authorization', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 201 })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['test content'], 'test.jpg', { type: 'image/jpeg' })
+
+    const { putUploadFile } = await import('./mediaClient')
+    await putUploadFile('https://api.example.com/api/v1/media/uploads/abc123', file)
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    const [url, options] = mockFetch.mock.calls[0]
+
+    expect(url).toBe('https://api.example.com/api/v1/media/uploads/abc123')
+    expect(options.method).toBe('PUT')
+    expect(options.headers).toEqual({ 'Content-Type': 'image/jpeg' })
+    expect(options.headers).not.toHaveProperty('Authorization')
+    expect(options.body).toBe(file)
+  })
+
+  it('resolves relative upload_url against VITE_GRAPH_API_BASE', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 201 })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['test'], 'test.png', { type: 'image/png' })
+
+    const { putUploadFile } = await import('./mediaClient')
+    await putUploadFile('/api/v1/media/uploads/token123', file)
+
+    const [url] = mockFetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/api/v1/media/uploads/token123')
+  })
+
+  it('throws PUT_CONTENT_TYPE_MISMATCH on 400', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 400, statusText: 'Bad Request' })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
+
+    const { putUploadFile, MediaApiError } = await import('./mediaClient')
+
+    await expect(putUploadFile('https://api.example.com/upload', file))
+      .rejects.toThrow('文件类型不匹配')
+
+    try {
+      await putUploadFile('https://api.example.com/upload', file)
+    } catch (e) {
+      expect((e as typeof MediaApiError.prototype).code).toBe('PUT_CONTENT_TYPE_MISMATCH')
+      expect((e as typeof MediaApiError.prototype).status).toBe(400)
+    }
+  })
+
+  it('throws PUT_INVALID_TOKEN on 401', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 401, statusText: 'Unauthorized' })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
+
+    const { putUploadFile, MediaApiError } = await import('./mediaClient')
+
+    await expect(putUploadFile('https://api.example.com/upload', file))
+      .rejects.toThrow('上传链接无效或已过期')
+
+    try {
+      await putUploadFile('https://api.example.com/upload', file)
+    } catch (e) {
+      expect((e as typeof MediaApiError.prototype).code).toBe('PUT_INVALID_TOKEN')
+      expect((e as typeof MediaApiError.prototype).status).toBe(401)
+    }
+  })
+
+  it('throws PUT_OVERSIZED on 413', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 413, statusText: 'Payload Too Large' })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
+
+    const { putUploadFile, MediaApiError } = await import('./mediaClient')
+
+    await expect(putUploadFile('https://api.example.com/upload', file))
+      .rejects.toThrow('文件过大')
+
+    try {
+      await putUploadFile('https://api.example.com/upload', file)
+    } catch (e) {
+      expect((e as typeof MediaApiError.prototype).code).toBe('PUT_OVERSIZED')
+      expect((e as typeof MediaApiError.prototype).status).toBe(413)
+    }
+  })
+
+  it('throws PUT_SERVER_ERROR on 5xx', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 500, statusText: 'Internal Server Error' })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
+
+    const { putUploadFile, MediaApiError } = await import('./mediaClient')
+
+    await expect(putUploadFile('https://api.example.com/upload', file))
+      .rejects.toThrow('服务器错误')
+
+    try {
+      await putUploadFile('https://api.example.com/upload', file)
+    } catch (e) {
+      expect((e as typeof MediaApiError.prototype).code).toBe('PUT_SERVER_ERROR')
+      expect((e as typeof MediaApiError.prototype).status).toBe(500)
+    }
+  })
+
+  it('throws PUT_NETWORK_ERROR on fetch failure', async () => {
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network timeout'))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' })
+
+    const { putUploadFile, MediaApiError } = await import('./mediaClient')
+
+    await expect(putUploadFile('https://api.example.com/upload', file))
+      .rejects.toThrow('网络错误')
+
+    try {
+      await putUploadFile('https://api.example.com/upload', file)
+    } catch (e) {
+      expect((e as typeof MediaApiError.prototype).code).toBe('PUT_NETWORK_ERROR')
+    }
+  })
+
+  it('succeeds on 201 Created', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 201 })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const file = new File(['image data'], 'photo.webp', { type: 'image/webp' })
+
+    const { putUploadFile } = await import('./mediaClient')
+    await expect(putUploadFile('https://api.example.com/upload', file)).resolves.toBeUndefined()
+  })
+
+  it('uploadToPresignedUrl is an alias for putUploadFile', async () => {
+    const { putUploadFile, uploadToPresignedUrl } = await import('./mediaClient')
+    expect(uploadToPresignedUrl).toBe(putUploadFile)
+  })
+})
