@@ -69,6 +69,10 @@ public class FamilyStore {
         return familyMemberMapper.countAdminsByFamilyId(familyId);
     }
 
+    public void updateProgenitor(UUID familyId, UUID progenitorPersonId) {
+        familyMapper.updateProgenitor(familyId, progenitorPersonId);
+    }
+
     public void clear() {
         familyMemberMapper.deleteAll();
         familyMapper.deleteAll();

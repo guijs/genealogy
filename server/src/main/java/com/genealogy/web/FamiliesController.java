@@ -39,7 +39,10 @@ public class FamiliesController {
 
         List<Family> families = familyStore.getFamiliesForUser(userId);
         List<FamilyResponse> familyResponses = families.stream()
-                .map(f -> new FamilyResponse(f.getId().toString(), f.getName()))
+                .map(f -> new FamilyResponse(
+                        f.getId().toString(),
+                        f.getName(),
+                        f.getProgenitorPersonId() != null ? f.getProgenitorPersonId().toString() : null))
                 .toList();
 
         return ResponseEntity.ok(new FamiliesListResponse(familyResponses));

@@ -1,7 +1,9 @@
 package com.genealogy.service;
 
+import com.genealogy.domain.family.Family;
 import com.genealogy.domain.person.Person;
 import com.genealogy.domain.projection.ProjectionPerson;
+import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
 import com.genealogy.store.UnionStore;
@@ -18,11 +20,13 @@ public class PersonService {
     private final PersonStore personStore;
     private final ProjectionStore projectionStore;
     private final UnionStore unionStore;
+    private final FamilyStore familyStore;
 
-    public PersonService(PersonStore personStore, ProjectionStore projectionStore, UnionStore unionStore) {
+    public PersonService(PersonStore personStore, ProjectionStore projectionStore, UnionStore unionStore, FamilyStore familyStore) {
         this.personStore = personStore;
         this.projectionStore = projectionStore;
         this.unionStore = unionStore;
+        this.familyStore = familyStore;
     }
 
     public static class PersonCapExceededException extends RuntimeException {
@@ -184,6 +188,18 @@ public class PersonService {
                 true
         );
         projectionStore.upsertPerson(updated);
+
+        clearProgenitorIfMatches(familyId, personId);
+    }
+
+    private void clearProgenitorIfMatches(UUID familyId, UUID personId) {
+        Optional<Family> familyOpt = familyStore.getFamily(familyId);
+        if (familyOpt.isPresent()) {
+            Family family = familyOpt.get();
+            if (personId.equals(family.getProgenitorPersonId())) {
+                familyStore.updateProgenitor(familyId, null);
+            }
+        }
     }
 
     @Transactional
