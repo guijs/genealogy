@@ -4,13 +4,18 @@ import { storeToRefs } from 'pinia'
 import { useRouter, useRoute } from 'vue-router'
 import TreeCanvas from '../features/tree/canvas/TreeCanvas.vue'
 import PersonDetailDrawer from '../features/tree/panels/PersonDetailDrawer.vue'
+import GenerationsView from '../features/tree/panels/GenerationsView.vue'
 import { useTreeViewStore } from '../features/tree/state/treeViewStore'
 import { useAuthStore } from '../stores/authStore'
+
+type ViewTab = 'tree' | 'generations'
 
 const router = useRouter()
 const route = useRoute()
 const store = useTreeViewStore()
 const authStore = useAuthStore()
+
+const activeTab = ref<ViewTab>('tree')
 const {
   loading,
   truncated,
@@ -58,9 +63,20 @@ const spouseStartedAt = ref('')
 const endMarriageReason = ref('')
 const endMarriageDate = ref('')
 
+function switchTab(tab: ViewTab) {
+  activeTab.value = tab
+  const query = { ...route.query, view: tab }
+  router.replace({ query })
+}
+
 onMounted(() => {
   const familyId = route.query.familyId as string | undefined
   const rootPersonId = route.query.rootPersonId as string | undefined
+  const viewParam = route.query.view as string | undefined
+
+  if (viewParam === 'generations') {
+    activeTab.value = 'generations'
+  }
 
   if (familyId) {
     void store.loadFamily(familyId, rootPersonId)
@@ -207,7 +223,7 @@ function handleLogout() {
 <template>
   <div class="page">
     <header class="topbar">
-      <div>
+      <div class="topbar-left">
         <h1>家族网络（只读投影）</h1>
         <p class="sub">
           <template v-if="usingGraphApi">
@@ -219,6 +235,29 @@ function handleLogout() {
             <code>GET /api/v1/families/{'{familyId}'}/graph</code>
           </template>
         </p>
+        <!-- View tabs -->
+        <nav v-if="usingGraphApi" class="view-tabs" role="tablist">
+          <button
+            type="button"
+            class="tab-btn"
+            :class="{ active: activeTab === 'tree' }"
+            role="tab"
+            :aria-selected="activeTab === 'tree'"
+            @click="switchTab('tree')"
+          >
+            网络树
+          </button>
+          <button
+            type="button"
+            class="tab-btn"
+            :class="{ active: activeTab === 'generations' }"
+            role="tab"
+            :aria-selected="activeTab === 'generations'"
+            @click="switchTab('generations')"
+          >
+            世代
+          </button>
+        </nav>
       </div>
       <div class="topbar-right">
         <button
@@ -485,20 +524,27 @@ function handleLogout() {
     </div>
 
     <div class="stage">
-      <p v-if="loading" class="loading">加载投影…</p>
-      <div v-else-if="emptyFamily" class="empty-state">
-        <p class="empty-title">这是一个新家族</p>
-        <p class="empty-desc">暂无成员，请先添加第一位家族成员</p>
-        <button
-          v-if="usingGraphApi"
-          type="button"
-          class="btn-add-first"
-          @click="openAddForm"
-        >
-          添加第一位成员
-        </button>
-      </div>
-      <TreeCanvas v-else />
+      <!-- Tree view (default) -->
+      <template v-if="activeTab === 'tree'">
+        <p v-if="loading" class="loading">加载投影…</p>
+        <div v-else-if="emptyFamily" class="empty-state">
+          <p class="empty-title">这是一个新家族</p>
+          <p class="empty-desc">暂无成员，请先添加第一位家族成员</p>
+          <button
+            v-if="usingGraphApi"
+            type="button"
+            class="btn-add-first"
+            @click="openAddForm"
+          >
+            添加第一位成员
+          </button>
+        </div>
+        <TreeCanvas v-else />
+      </template>
+
+      <!-- Generations view -->
+      <GenerationsView v-if="activeTab === 'generations'" />
+
       <PersonDetailDrawer />
 
       <!-- 已隐藏成员面板 -->
@@ -589,11 +635,44 @@ function handleLogout() {
 .topbar {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 16px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--color-border, #d8d4cc);
   background: #fff;
+}
+.topbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* View tabs */
+.view-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  border-radius: 8px;
+  background: #f3f1ec;
+  padding: 4px;
+}
+.tab-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.tab-btn:hover {
+  color: #333;
+}
+.tab-btn.active {
+  background: #fff;
+  color: var(--color-accent, #2f5d50);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .topbar-right {
   display: flex;
