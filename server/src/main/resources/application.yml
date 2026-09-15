@@ -25,6 +25,13 @@ jwt:
   secret: ${JWT_SECRET:change-me-in-production-min-32-chars-long-secret-key}
   expiration-hours: 24
 
+media:
+  storage: local
+  upload-secret: ${MEDIA_UPLOAD_SECRET:change-me-in-production-min-32-chars-upload-secret}
+  upload-token-expiry-minutes: 15
+  local:
+    root: ${MEDIA_LOCAL_ROOT:./data/media}
+
 logging:
   level:
     root: INFO
