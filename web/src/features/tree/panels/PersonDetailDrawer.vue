@@ -69,6 +69,50 @@ async function handleRestore() {
   if (!selectedPerson.value) return
   await store.restorePerson(selectedPerson.value.id)
 }
+
+async function handleDissolveParent(row: {
+  person: { id: string; displayName: string }
+  relationshipId: string
+  subtype?: string
+  role?: string
+}) {
+  if (!selectedPerson.value) return
+  const confirmed = window.confirm(
+    `确定要解除与「${row.person.displayName}」的亲子关系吗？此操作可以恢复。`,
+  )
+  if (!confirmed) return
+  await store.dissolveParentChildRelationship(
+    row.relationshipId,
+    row.person.id,
+    selectedPerson.value.id,
+    row.person.displayName,
+    selectedPerson.value.displayName,
+    row.subtype,
+    row.role,
+  )
+}
+
+async function handleDissolveChild(row: {
+  person: { id: string; displayName: string }
+  relationshipId: string
+  subtype?: string
+  role?: string
+}) {
+  if (!selectedPerson.value) return
+  const confirmed = window.confirm(
+    `确定要解除与「${row.person.displayName}」的亲子关系吗？此操作可以恢复。`,
+  )
+  if (!confirmed) return
+  await store.dissolveParentChildRelationship(
+    row.relationshipId,
+    selectedPerson.value.id,
+    row.person.id,
+    selectedPerson.value.displayName,
+    row.person.displayName,
+    row.subtype,
+    row.role,
+  )
+}
 </script>
 
 <template>
@@ -161,6 +205,15 @@ async function handleRestore() {
             {{ row.person.displayName }}
           </button>
           <span v-if="row.subtype === 'adoptive'" class="tag">养</span>
+          <button
+            v-if="usingGraphApi && !editMode && !selectedPersonHidden"
+            type="button"
+            class="btn-dissolve"
+            :disabled="submitting"
+            @click="handleDissolveParent(row)"
+          >
+            解除
+          </button>
         </li>
       </ul>
       <p v-else class="empty">暂无（缺边）</p>
@@ -219,6 +272,15 @@ async function handleRestore() {
             {{ row.person.displayName }}
           </button>
           <span v-if="row.subtype === 'adoptive'" class="tag">养</span>
+          <button
+            v-if="usingGraphApi && !editMode && !selectedPersonHidden"
+            type="button"
+            class="btn-dissolve"
+            :disabled="submitting"
+            @click="handleDissolveChild(row)"
+          >
+            解除
+          </button>
         </li>
       </ul>
       <p v-else class="empty">暂无</p>
@@ -503,6 +565,23 @@ async function handleRestore() {
   background: rgba(138, 133, 128, 0.1);
 }
 .btn-end-marriage:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-dissolve {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--color-ended, #8a8580);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-ended, #8a8580);
+  font-size: 11px;
+  cursor: pointer;
+}
+.btn-dissolve:hover:not(:disabled) {
+  background: rgba(138, 133, 128, 0.1);
+}
+.btn-dissolve:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

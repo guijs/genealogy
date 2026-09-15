@@ -29,16 +29,26 @@ const {
   hideConfirmOpen,
   hideConfirmMessage,
   hiddenPersonsForCurrentFamily,
+  dissolvedRelationshipsForCurrentFamily,
 } = storeToRefs(store)
 
 const hiddenPanelOpen = ref(false)
+const dissolvedPanelOpen = ref(false)
 
 function toggleHiddenPanel() {
   hiddenPanelOpen.value = !hiddenPanelOpen.value
 }
 
+function toggleDissolvedPanel() {
+  dissolvedPanelOpen.value = !dissolvedPanelOpen.value
+}
+
 async function handleRestoreFromPanel(personId: string) {
   await store.restorePersonFromPanel(personId)
+}
+
+async function handleRestoreRelationshipFromPanel(relationshipId: string) {
+  await store.restoreParentChildRelationship(relationshipId)
 }
 
 const addFirstName = ref('')
@@ -241,6 +251,14 @@ function handleLogout() {
           @click="toggleHiddenPanel"
         >
           已隐藏 ({{ hiddenPersonsForCurrentFamily.length }})
+        </button>
+        <button
+          v-if="usingGraphApi && dissolvedRelationshipsForCurrentFamily.length > 0"
+          type="button"
+          class="btn-dissolved-list"
+          @click="toggleDissolvedPanel"
+        >
+          已解除 ({{ dissolvedRelationshipsForCurrentFamily.length }})
         </button>
         <button
           v-if="usingGraphApi"
@@ -510,6 +528,45 @@ function handleLogout() {
               class="btn-restore-small"
               :disabled="submitting"
               @click="handleRestoreFromPanel(person.id)"
+            >
+              {{ submitting ? '…' : '恢复' }}
+            </button>
+          </li>
+        </ul>
+      </aside>
+
+      <!-- 已解除的亲子关系面板 -->
+      <aside
+        v-if="dissolvedPanelOpen && dissolvedRelationshipsForCurrentFamily.length > 0"
+        class="dissolved-panel"
+        aria-label="已解除的亲子关系"
+      >
+        <header class="dissolved-panel-head">
+          <h3 class="dissolved-panel-title">已解除的亲子关系</h3>
+          <button type="button" class="dissolved-panel-close" @click="toggleDissolvedPanel">
+            ✕
+          </button>
+        </header>
+        <p class="dissolved-panel-desc">
+          以下亲子关系已解除，点击「恢复」可重新建立。
+        </p>
+        <ul class="dissolved-list">
+          <li
+            v-for="rel in dissolvedRelationshipsForCurrentFamily"
+            :key="rel.id"
+            class="dissolved-item"
+          >
+            <div class="dissolved-info">
+              <span class="dissolved-names">
+                {{ rel.parentDisplayName }} → {{ rel.childDisplayName }}
+              </span>
+              <span v-if="rel.subtype === 'adoptive'" class="dissolved-tag">养</span>
+            </div>
+            <button
+              type="button"
+              class="btn-restore-small"
+              :disabled="submitting"
+              @click="handleRestoreRelationshipFromPanel(rel.id)"
             >
               {{ submitting ? '…' : '恢复' }}
             </button>
@@ -821,6 +878,20 @@ function handleLogout() {
 .btn-hidden-list:hover {
   background: #ffeccc;
 }
+.btn-dissolved-list {
+  padding: 6px 14px;
+  border: 1px solid var(--color-ended, #8a8580);
+  border-radius: 6px;
+  background: #f5f4f3;
+  color: var(--color-ended, #8a8580);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-dissolved-list:hover {
+  background: #eeedeb;
+}
 /* 已隐藏成员面板 */
 .hidden-panel {
   position: absolute;
@@ -909,5 +980,89 @@ function handleLogout() {
 .btn-restore-small:disabled {
   background: #ccc;
   cursor: not-allowed;
+}
+/* 已解除的亲子关系面板 */
+.dissolved-panel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: min(320px, 100%);
+  max-height: 100%;
+  background: var(--color-card, #fff);
+  border-right: 1px solid var(--color-border, #d8d4cc);
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.06);
+  padding: 16px;
+  overflow: auto;
+  z-index: 15;
+  box-sizing: border-box;
+}
+.dissolved-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.dissolved-panel-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-ended, #8a8580);
+}
+.dissolved-panel-close {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  cursor: pointer;
+  color: #666;
+  padding: 4px 8px;
+}
+.dissolved-panel-close:hover {
+  color: #333;
+}
+.dissolved-panel-desc {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #666;
+}
+.dissolved-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dissolved-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #faf9f7;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.dissolved-item:last-child {
+  margin-bottom: 0;
+}
+.dissolved-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.dissolved-names {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dissolved-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #e8f0ed;
+  color: var(--color-accent, #2f5d50);
 }
 </style>
