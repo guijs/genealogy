@@ -186,3 +186,46 @@ export interface DissolvedRelationship {
   subtype?: string
   role?: string
 }
+
+/**
+ * P1: Ego-relative generation layer projection.
+ * GET /api/v1/families/{familyId}/generations?focusPersonId={uuid}
+ *
+ * focusPersonId is optional:
+ * - If provided and valid in family: use as Ego
+ * - If omitted/empty: fallback to earliest created non-hidden person in family
+ * - If family has zero non-hidden persons: 404 "no persons in family"
+ *
+ * Client selection strategy (not enforced by API):
+ * - "本人节点" (self node) if user has one
+ * - "会话上次焦点" (session's last focus) if available
+ * - Otherwise omit and let backend resolve to earliest person
+ *
+ * Generation rules:
+ * - Ego is at generation index 0
+ * - Parents via biological edges → -1, grandparents → -2, etc.
+ * - Children via biological edges → +1, grandchildren → +2, etc.
+ * - Adoptive edges do NOT change generation (never used for climb)
+ * - Dissolved edges are excluded
+ * - Hidden persons are excluded
+ * - Spouses are not included via marriage alone (only bio-reachable persons)
+ */
+
+export interface GenerationPersonDTO {
+  id: string
+  displayName: string
+  /** True if person is reachable via paths with conflicting generation indices */
+  conflict?: boolean
+}
+
+export interface GenerationDTO {
+  index: number
+  persons: GenerationPersonDTO[]
+}
+
+export interface GenerationsProjection {
+  familyId: string
+  focusPersonId: string
+  /** Generations sorted by index ascending */
+  generations: GenerationDTO[]
+}
