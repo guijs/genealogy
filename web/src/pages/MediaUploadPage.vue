@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   requestUploadUrl,
+  putUploadFile,
   validateFile,
   MediaApiError,
   ALLOWED_MIME_TYPES,
@@ -17,11 +18,19 @@ const usingGraphApi = computed(() => isUsingGraphApi())
 
 const selectedFile = ref<File | null>(null)
 const uploading = ref(false)
+const uploadStep = ref<'idle' | 'getting-url' | 'uploading' | 'success'>('idle')
 const errorMessage = ref('')
 const uploadUrl = ref('')
 const storageKey = ref('')
+const previewUrl = ref<string | null>(null)
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
+
+onUnmounted(() => {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
+})
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -36,6 +45,12 @@ function handleFileSelect(event: Event) {
   errorMessage.value = ''
   uploadUrl.value = ''
   storageKey.value = ''
+  uploadStep.value = 'idle'
+  
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = null
+  }
   
   if (!file) {
     selectedFile.value = null
@@ -56,12 +71,18 @@ function handleFileSelect(event: Event) {
 }
 
 async function handleUpload() {
-  if (!selectedFile.value || !familyId.value) return
+  if (!selectedFile.value || !familyId.value || uploading.value) return
   
   uploading.value = true
   errorMessage.value = ''
   uploadUrl.value = ''
   storageKey.value = ''
+  uploadStep.value = 'getting-url'
+  
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = null
+  }
   
   try {
     const response = await requestUploadUrl(
@@ -71,13 +92,20 @@ async function handleUpload() {
     )
     uploadUrl.value = response.upload_url
     storageKey.value = response.storage_key
+    
+    uploadStep.value = 'uploading'
+    await putUploadFile(response.upload_url, selectedFile.value)
+    
+    uploadStep.value = 'success'
+    previewUrl.value = URL.createObjectURL(selectedFile.value)
   } catch (e) {
+    uploadStep.value = 'idle'
     if (e instanceof MediaApiError) {
       errorMessage.value = e.message
     } else if (e instanceof Error) {
       errorMessage.value = e.message
     } else {
-      errorMessage.value = '获取上传 URL 失败'
+      errorMessage.value = '上传失败'
     }
   } finally {
     uploading.value = false
@@ -89,6 +117,11 @@ function clearSelection() {
   uploadUrl.value = ''
   storageKey.value = ''
   errorMessage.value = ''
+  uploadStep.value = 'idle'
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = null
+  }
   if (fileInputRef.value) {
     fileInputRef.value.value = ''
   }
@@ -110,8 +143,7 @@ function goBack() {
         <h1>媒体上传</h1>
         <p class="sub">
           <template v-if="usingGraphApi">
-            已接真 API ·
-            <code>POST /api/v1/families/{'{familyId}'}/media/upload-url</code>
+            已接真 API · 选择图片后直接上传
           </template>
           <template v-else>
             当前为 mock 模式 · 上传功能不可用
@@ -166,10 +198,13 @@ function goBack() {
           <button
             type="button"
             class="btn-primary"
-            :disabled="!selectedFile || uploading"
+            :disabled="!selectedFile || uploading || uploadStep === 'success'"
             @click="handleUpload"
           >
-            {{ uploading ? '获取中…' : '获取上传 URL' }}
+            <template v-if="uploadStep === 'getting-url'">获取上传地址…</template>
+            <template v-else-if="uploadStep === 'uploading'">上传中…</template>
+            <template v-else-if="uploadStep === 'success'">已上传</template>
+            <template v-else>上传文件</template>
           </button>
           <button
             v-if="selectedFile"
@@ -182,18 +217,17 @@ function goBack() {
           </button>
         </div>
 
-        <div v-if="uploadUrl && storageKey" class="result-box">
-          <h3>上传信息</h3>
-          <div class="result-item">
-            <label>upload_url</label>
-            <code class="result-value">{{ uploadUrl }}</code>
+        <div v-if="uploadStep === 'success' && storageKey" class="result-box success">
+          <h3>上传成功</h3>
+          <div v-if="previewUrl" class="preview-area">
+            <img :src="previewUrl" alt="预览" class="preview-image" />
           </div>
           <div class="result-item">
-            <label>storage_key</label>
+            <label>存储标识 (storage_key)</label>
             <code class="result-value">{{ storageKey }}</code>
           </div>
-          <p class="result-hint">
-            可使用上述 URL 执行 PUT 请求上传文件（可选）
+          <p class="result-hint success-hint">
+            文件已成功上传到服务器
           </p>
         </div>
       </div>
@@ -422,5 +456,27 @@ function goBack() {
   margin: 12px 0 0;
   font-size: 13px;
   color: #666;
+}
+
+.success-hint {
+  color: #276749;
+}
+
+.preview-area {
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 8px;
+  border: 1px solid #d8d4cc;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.result-box.success {
+  background: #f0fff4;
+  border-color: #38a169;
 }
 </style>
