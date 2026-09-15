@@ -159,8 +159,14 @@ public class RelationshipService {
             throw new RestoreBlockedException(e.getMessage());
         }
 
-        relationshipMapper.setDissolved(relationshipId, false);
-        kinshipStore.invalidateCache(familyId);
+        // Use try-finally to ensure cache is invalidated even if setDissolved fails.
+        // This prevents stale cache state when the @Transactional rolls back the DB
+        // but the in-memory graph was already modified by addRelation above.
+        try {
+            relationshipMapper.setDissolved(relationshipId, false);
+        } finally {
+            kinshipStore.invalidateCache(familyId);
+        }
     }
 
     private RelationType mapToRelationType(ParentChildSubtype subtype, ParentRole role) {

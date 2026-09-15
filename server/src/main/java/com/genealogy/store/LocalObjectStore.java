@@ -52,22 +52,40 @@ public class LocalObjectStore implements ObjectStore {
     }
 
     public void storeFile(String storageKey, InputStream inputStream, long contentLength) throws IOException {
-        Path rootPath = Paths.get(properties.getLocal().getRoot());
-        Path filePath = rootPath.resolve(storageKey);
+        Path filePath = resolveAndValidatePath(storageKey);
 
         Files.createDirectories(filePath.getParent());
         Files.copy(inputStream, filePath, StandardCopyOption.REPLACE_EXISTING);
     }
 
     public boolean fileExists(String storageKey) {
-        Path rootPath = Paths.get(properties.getLocal().getRoot());
-        Path filePath = rootPath.resolve(storageKey);
+        Path filePath = resolveAndValidatePath(storageKey);
         return Files.exists(filePath);
     }
 
     public Path getFilePath(String storageKey) {
-        Path rootPath = Paths.get(properties.getLocal().getRoot());
-        return rootPath.resolve(storageKey);
+        return resolveAndValidatePath(storageKey);
+    }
+
+    /**
+     * Resolves the storage key against the configured root and validates that
+     * the resulting path is within the storage root. Prevents path traversal
+     * attacks using "../" sequences or absolute paths.
+     *
+     * @param storageKey the storage key to resolve
+     * @return the validated absolute path
+     * @throws PathTraversalException if the resolved path escapes the storage root
+     */
+    private Path resolveAndValidatePath(String storageKey) {
+        Path rootPath = Paths.get(properties.getLocal().getRoot()).toAbsolutePath().normalize();
+        Path resolvedPath = rootPath.resolve(storageKey).toAbsolutePath().normalize();
+
+        if (!resolvedPath.startsWith(rootPath)) {
+            throw new PathTraversalException(
+                "Invalid storage key: path traversal attempt detected - resolved path escapes storage root");
+        }
+
+        return resolvedPath;
     }
 
     private UUID extractFamilyIdFromKey(String key) {

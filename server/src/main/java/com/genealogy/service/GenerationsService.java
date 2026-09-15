@@ -50,14 +50,19 @@ public class GenerationsService {
      * If focusPersonId is null, falls back to earliest created non-hidden person in family.
      */
     public GenerationsProjectionResponse getGenerations(UUID familyId, UUID focusPersonId) {
+        // Batch-preload all persons for this family to avoid N+1 queries during BFS
+        Map<UUID, ProjectionPerson> allPersonsInFamily = new HashMap<>();
+        for (ProjectionPerson p : projectionStore.getPersonsByFamily(familyId)) {
+            allPersonsInFamily.put(p.getId(), p);
+        }
+
         ProjectionPerson focusPerson;
 
         if (focusPersonId != null) {
-            Optional<ProjectionPerson> focusOpt = projectionStore.getPerson(focusPersonId);
-            if (focusOpt.isEmpty() || !focusOpt.get().getFamilyId().equals(familyId)) {
+            focusPerson = allPersonsInFamily.get(focusPersonId);
+            if (focusPerson == null || !focusPerson.getFamilyId().equals(familyId)) {
                 throw new PersonNotInFamilyException();
             }
-            focusPerson = focusOpt.get();
             if (focusPerson.isHidden()) {
                 throw new PersonNotInFamilyException();
             }
@@ -98,11 +103,10 @@ public class GenerationsService {
                 }
 
                 UUID parentId = r.getParentId();
-                Optional<ProjectionPerson> parentOpt = projectionStore.getPerson(parentId);
-                if (parentOpt.isEmpty() || !parentOpt.get().getFamilyId().equals(familyId)) {
+                ProjectionPerson parent = allPersonsInFamily.get(parentId);
+                if (parent == null || !parent.getFamilyId().equals(familyId)) {
                     continue;
                 }
-                ProjectionPerson parent = parentOpt.get();
                 if (parent.isHidden()) {
                     continue;
                 }
@@ -132,11 +136,10 @@ public class GenerationsService {
                 }
 
                 UUID childId = r.getChildId();
-                Optional<ProjectionPerson> childOpt = projectionStore.getPerson(childId);
-                if (childOpt.isEmpty() || !childOpt.get().getFamilyId().equals(familyId)) {
+                ProjectionPerson child = allPersonsInFamily.get(childId);
+                if (child == null || !child.getFamilyId().equals(familyId)) {
                     continue;
                 }
-                ProjectionPerson child = childOpt.get();
                 if (child.isHidden()) {
                     continue;
                 }
