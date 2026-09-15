@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { ref, watch } from 'vue'
+import { SIBLING_KIND_LABEL } from '../layout/unionLayout'
 import { useTreeViewStore } from '../state/treeViewStore'
 
 const store = useTreeViewStore()
@@ -8,6 +9,7 @@ const {
   drawerOpen,
   selectedPerson,
   selectedKin,
+  selectedSiblings,
   usingGraphApi,
   editMode,
   submitting,
@@ -220,6 +222,24 @@ async function handleRestore() {
         </li>
       </ul>
       <p v-else class="empty">暂无</p>
+    </section>
+
+    <section v-if="selectedSiblings.length > 0" class="section">
+      <h3 class="section-title">兄弟姐妹</h3>
+      <ul class="kin-list">
+        <li v-for="sib in selectedSiblings" :key="sib.siblingId">
+          <span class="kin-label">{{ SIBLING_KIND_LABEL[sib.kind] }}</span>
+          <button
+            v-if="sib.person"
+            type="button"
+            class="kin-name link"
+            @click="store.selectPerson(sib.siblingId)"
+          >
+            {{ sib.person.displayName }}
+          </button>
+          <span v-else class="kin-name fallback">{{ sib.siblingId }}</span>
+        </li>
+      </ul>
     </section>
 
     <!-- 隐藏/恢复操作 -->
@@ -439,6 +459,10 @@ async function handleRestore() {
   margin: 0;
   font-size: var(--type-body, 15px);
   color: #888;
+}
+.fallback {
+  color: var(--color-ink-muted, #888);
+  font-style: italic;
 }
 .section-header {
   display: flex;

@@ -8,8 +8,10 @@ import type {
 } from '../api/types'
 import {
   buildUnions,
+  deriveSiblingsForPerson,
   isMarriageEnded,
   layoutUnionGraph,
+  SIBLING_KIND_LABEL,
 } from './unionLayout'
 
 function projectionOf(
@@ -207,5 +209,44 @@ describe('buildUnions / layoutUnionGraph', () => {
     }
     const ming = layout.nodes.find((n) => n.personId === 'p-chen-ming')
     expect(ming).toBeTruthy()
+  })
+})
+
+describe('deriveSiblingsForPerson', () => {
+  it('returns siblings for selected person from fixture', () => {
+    const siblings = deriveSiblingsForPerson('p-chen-hua', chenDivorceRemarriageFixture)
+    expect(siblings).toHaveLength(2)
+
+    const fullSibling = siblings.find((s) => s.kind === 'full')
+    expect(fullSibling).toBeTruthy()
+    expect(fullSibling!.siblingId).toBe('p-chen-fang')
+    expect(fullSibling!.person?.displayName).toBe('陈芳')
+
+    const halfSibling = siblings.find((s) => s.kind === 'paternal_half')
+    expect(halfSibling).toBeTruthy()
+    expect(halfSibling!.siblingId).toBe('p-chen-ming')
+    expect(halfSibling!.person?.displayName).toBe('陈明')
+  })
+
+  it('returns empty array when person has no siblings', () => {
+    const siblings = deriveSiblingsForPerson('p-chen-jianguo', chenDivorceRemarriageFixture)
+    expect(siblings).toHaveLength(0)
+  })
+
+  it('returns null person when sibling not in persons list (truncation edge)', () => {
+    const truncatedFixture = {
+      ...chenDivorceRemarriageFixture,
+      persons: chenDivorceRemarriageFixture.persons.filter((p) => p.id !== 'p-chen-fang'),
+    }
+    const siblings = deriveSiblingsForPerson('p-chen-hua', truncatedFixture)
+    const fangSibling = siblings.find((s) => s.siblingId === 'p-chen-fang')
+    expect(fangSibling).toBeTruthy()
+    expect(fangSibling!.person).toBeNull()
+  })
+
+  it('SIBLING_KIND_LABEL has correct Chinese labels', () => {
+    expect(SIBLING_KIND_LABEL.full).toBe('同胞')
+    expect(SIBLING_KIND_LABEL.paternal_half).toBe('同父异母')
+    expect(SIBLING_KIND_LABEL.maternal_half).toBe('同母异父')
   })
 })

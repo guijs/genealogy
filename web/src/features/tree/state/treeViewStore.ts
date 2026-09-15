@@ -25,7 +25,11 @@ import {
   UnionApiError,
 } from '../api/unionClient'
 import type { GraphProjection, PersonDTO } from '../api/types'
-import { deriveKinForPerson, layoutUnionGraph } from '../layout/unionLayout'
+import {
+  deriveKinForPerson,
+  deriveSiblingsForPerson,
+  layoutUnionGraph,
+} from '../layout/unionLayout'
 
 export const useTreeViewStore = defineStore('treeView', () => {
   const graph = ref<GraphProjection | null>(null)
@@ -96,6 +100,13 @@ export const useTreeViewStore = defineStore('treeView', () => {
       return { parents: [], spouses: [], children: [] }
     }
     return deriveKinForPerson(selectedPersonId.value, graph.value)
+  })
+
+  const selectedSiblings = computed(() => {
+    if (!graph.value || !selectedPersonId.value) {
+      return []
+    }
+    return deriveSiblingsForPerson(selectedPersonId.value, graph.value)
   })
 
   const truncated = computed(() => graph.value?.truncated === true)
@@ -623,6 +634,7 @@ export const useTreeViewStore = defineStore('treeView', () => {
     layout,
     selectedPerson,
     selectedKin,
+    selectedSiblings,
     truncated,
     truncateReason,
     loadDemo,
