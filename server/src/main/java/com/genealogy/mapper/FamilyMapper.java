@@ -15,5 +15,7 @@ public interface FamilyMapper {
     
     boolean existsById(@Param("id") UUID id);
     
+    void updateProgenitor(@Param("id") UUID id, @Param("progenitorPersonId") UUID progenitorPersonId);
+    
     void deleteAll();
 }

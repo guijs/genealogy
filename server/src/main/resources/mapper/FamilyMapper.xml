@@ -6,6 +6,7 @@
         <constructor>
             <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
             <arg column="name" javaType="java.lang.String"/>
+            <arg column="progenitor_person_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
         </constructor>
     </resultMap>
 
@@ -15,12 +16,16 @@
     </insert>
 
     <select id="findById" resultMap="familyResultMap">
-        SELECT id, name FROM families WHERE id = #{id}
+        SELECT id, name, progenitor_person_id FROM families WHERE id = #{id}
     </select>
 
     <select id="existsById" resultType="boolean">
         SELECT COUNT(*) > 0 FROM families WHERE id = #{id}
     </select>
+
+    <update id="updateProgenitor">
+        UPDATE families SET progenitor_person_id = #{progenitorPersonId} WHERE id = #{id}
+    </update>
 
     <delete id="deleteAll">
         DELETE FROM families

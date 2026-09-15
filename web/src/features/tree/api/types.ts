@@ -229,3 +229,42 @@ export interface GenerationsProjection {
   /** Generations sorted by index ascending */
   generations: GenerationDTO[]
 }
+
+/**
+ * 世系投影 — GET /api/v1/families/{familyId}/lineage
+ * 
+ * 从始祖(progenitor)向下、仅通过非解除的生物学亲子关系遍历。
+ * 始祖为第1世，其生物学子女为第2世，以此类推。
+ * 
+ * 规则：
+ * - 仅非解除的 biological 边参与遍历
+ * - 养子关系(adoptive)不参与世系层级
+ * - Hidden人员不出现在世系中
+ * - 未连接到始祖的人员不出现
+ * - 多路径到达同一人员且世次不一致时，标记 conflict: true
+ * - 配偶不创建世系层
+ */
+export interface LineagePersonDTO {
+  id: string
+  display_name: string
+  conflict: boolean
+}
+
+export interface LineageGenerationDTO {
+  index: number
+  persons: LineagePersonDTO[]
+}
+
+export interface LineageResponse {
+  family_id: string
+  progenitor_person_id: string | null
+  generations: LineageGenerationDTO[]
+}
+
+export interface SetProgenitorRequest {
+  person_id: string | null
+}
+
+export interface SetProgenitorResponse {
+  progenitor_person_id: string | null
+}
