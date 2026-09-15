@@ -51,6 +51,9 @@ public class WriteAccessFilter extends OncePerRequestFilter {
     private static final Pattern PERSONS_RESTORE_PATH_PATTERN = 
             Pattern.compile("^/api/v1/families/[^/]+/persons/[^/]+/restore$");
 
+    private static final Pattern PROGENITOR_PATH_PATTERN = 
+            Pattern.compile("^/api/v1/families/[^/]+/progenitor$");
+
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -112,6 +115,9 @@ public class WriteAccessFilter extends OncePerRequestFilter {
             return true;
         }
         if ("POST".equals(method) && MEDIA_UPLOAD_URL_PATH_PATTERN.matcher(path).matches()) {
+            return true;
+        }
+        if ("PUT".equals(method) && PROGENITOR_PATH_PATTERN.matcher(path).matches()) {
             return true;
         }
         return false;

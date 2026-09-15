@@ -146,13 +146,13 @@ class LineageControllerTest extends BaseIntegrationTest {
     }
 
     @Test
-    void setProgenitor_asViewer_returns403() throws Exception {
+    void setProgenitor_asViewer_returns403WriteAccessRequired() throws Exception {
         mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/progenitor")
                         .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"person_id\":\"" + PROGENITOR_ID + "\"}"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("admin access required"));
+                .andExpect(jsonPath("$.error").value("write access required"));
     }
 
     @Test
