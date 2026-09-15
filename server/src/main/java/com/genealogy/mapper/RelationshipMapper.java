@@ -27,5 +27,9 @@ public interface RelationshipMapper {
     
     List<ProjectionRelationship> findByChildId(@Param("childId") UUID childId);
     
+    ProjectionRelationship findByIdAndFamilyId(@Param("id") UUID id, @Param("familyId") UUID familyId);
+    
+    void setDissolved(@Param("id") UUID id, @Param("dissolved") boolean dissolved);
+    
     void deleteAll();
 }

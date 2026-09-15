@@ -40,6 +40,15 @@
         FROM relationships WHERE child_id = #{childId}
     </select>
 
+    <select id="findByIdAndFamilyId" resultMap="projectionRelationshipResultMap">
+        SELECT id, family_id, parent_id, child_id, subtype, role, marriage_id, dissolved
+        FROM relationships WHERE id = #{id} AND family_id = #{familyId}
+    </select>
+
+    <update id="setDissolved">
+        UPDATE relationships SET dissolved = #{dissolved} WHERE id = #{id}
+    </update>
+
     <delete id="deleteAll">
         DELETE FROM relationships
     </delete>
