@@ -352,4 +352,240 @@ class SiblingDerivationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.siblings[0].kind").value("maternal_half"))
                 .andExpect(jsonPath("$.siblings[0].sharedParentIds", hasItem(MOTHER_ID.toString())));
     }
+
+    // ==================== REGRESSION TESTS (MAJOR-1 fix) ====================
+
+    /**
+     * Test 10: REGRESSION - Hidden bio father still participates in derivation.
+     * Two visible children share a hidden biological father → paternal_half siblings.
+     * sharedParentIds should be empty (hidden parent redacted for privacy).
+     */
+    @Test
+    void hiddenBioFather_stillDerivesPaternelHalfSiblings() throws Exception {
+        projectionStore.createPerson(new ProjectionPerson(FATHER_ID, FAMILY_ID, "Hidden Father", Gender.MALE, 1960, null, true));
+        projectionStore.createPerson(new ProjectionPerson(MOTHER_ID, FAMILY_ID, "Mother1", Gender.FEMALE, 1965, null, false));
+        projectionStore.createPerson(new ProjectionPerson(MOTHER2_ID, FAMILY_ID, "Mother2", Gender.FEMALE, 1968, null, false));
+        projectionStore.createPerson(new ProjectionPerson(CHILD1_ID, FAMILY_ID, "Child1", Gender.MALE, 1990, null, false));
+        projectionStore.createPerson(new ProjectionPerson(CHILD2_ID, FAMILY_ID, "Child2", Gender.FEMALE, 1995, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER2_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
+                        .param("rootPersonId", CHILD1_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.siblings").isArray())
+                .andExpect(jsonPath("$.siblings.length()").value(1))
+                .andExpect(jsonPath("$.siblings[0].kind").value("paternal_half"))
+                .andExpect(jsonPath("$.siblings[0].sharedParentIds").isEmpty());
+    }
+
+    /**
+     * Test 11: REGRESSION - Hidden bio mother still participates in derivation.
+     * Two visible children share a hidden biological mother → maternal_half siblings.
+     * sharedParentIds should be empty (hidden parent redacted for privacy).
+     */
+    @Test
+    void hiddenBioMother_stillDerivesMaternalHalfSiblings() throws Exception {
+        projectionStore.createPerson(new ProjectionPerson(FATHER_ID, FAMILY_ID, "Father1", Gender.MALE, 1960, null, false));
+        projectionStore.createPerson(new ProjectionPerson(FATHER2_ID, FAMILY_ID, "Father2", Gender.MALE, 1962, null, false));
+        projectionStore.createPerson(new ProjectionPerson(MOTHER_ID, FAMILY_ID, "Hidden Mother", Gender.FEMALE, 1965, null, true));
+        projectionStore.createPerson(new ProjectionPerson(CHILD1_ID, FAMILY_ID, "Child1", Gender.MALE, 1990, null, false));
+        projectionStore.createPerson(new ProjectionPerson(CHILD2_ID, FAMILY_ID, "Child2", Gender.FEMALE, 1995, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER2_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
+                        .param("rootPersonId", CHILD1_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.siblings").isArray())
+                .andExpect(jsonPath("$.siblings.length()").value(1))
+                .andExpect(jsonPath("$.siblings[0].kind").value("maternal_half"))
+                .andExpect(jsonPath("$.siblings[0].sharedParentIds").isEmpty());
+    }
+
+    /**
+     * Test 12: REGRESSION - Hidden bio parents, both shared → full siblings.
+     * Two visible children share hidden bio father AND hidden bio mother → full siblings.
+     * sharedParentIds should be empty (both hidden parents redacted for privacy).
+     */
+    @Test
+    void hiddenBothBioParents_stillDerivesFullSiblings() throws Exception {
+        projectionStore.createPerson(new ProjectionPerson(FATHER_ID, FAMILY_ID, "Hidden Father", Gender.MALE, 1960, null, true));
+        projectionStore.createPerson(new ProjectionPerson(MOTHER_ID, FAMILY_ID, "Hidden Mother", Gender.FEMALE, 1965, null, true));
+        projectionStore.createPerson(new ProjectionPerson(CHILD1_ID, FAMILY_ID, "Child1", Gender.MALE, 1990, null, false));
+        projectionStore.createPerson(new ProjectionPerson(CHILD2_ID, FAMILY_ID, "Child2", Gender.FEMALE, 1992, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
+                        .param("rootPersonId", CHILD1_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.siblings").isArray())
+                .andExpect(jsonPath("$.siblings.length()").value(1))
+                .andExpect(jsonPath("$.siblings[0].kind").value("full"))
+                .andExpect(jsonPath("$.siblings[0].sharedParentIds").isEmpty());
+    }
+
+    /**
+     * Test 13: One shared bio parent known, other side unknown → half siblings.
+     * Child1 has father + mother, Child2 only has same father → paternal_half.
+     */
+    @Test
+    void oneSharedParent_otherUnknown_halfSiblings() throws Exception {
+        projectionStore.createPerson(new ProjectionPerson(FATHER_ID, FAMILY_ID, "Father", Gender.MALE, 1960, null, false));
+        projectionStore.createPerson(new ProjectionPerson(MOTHER_ID, FAMILY_ID, "Mother", Gender.FEMALE, 1965, null, false));
+        projectionStore.createPerson(new ProjectionPerson(CHILD1_ID, FAMILY_ID, "Child1", Gender.MALE, 1990, null, false));
+        projectionStore.createPerson(new ProjectionPerson(CHILD2_ID, FAMILY_ID, "Child2", Gender.FEMALE, 1995, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
+                        .param("rootPersonId", FATHER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.siblings").isArray())
+                .andExpect(jsonPath("$.siblings.length()").value(1))
+                .andExpect(jsonPath("$.siblings[0].kind").value("paternal_half"))
+                .andExpect(jsonPath("$.siblings[0].sharedParentIds", hasItem(FATHER_ID.toString())));
+    }
+
+    /**
+     * Test 14: Stronger canonical pair ordering assertion.
+     * Ensure personId < siblingId lexicographically for all pairs.
+     */
+    @Test
+    void canonicalPairOrdering_personIdLessThanSiblingId() throws Exception {
+        projectionStore.createPerson(new ProjectionPerson(FATHER_ID, FAMILY_ID, "Father", Gender.MALE, 1960, null, false));
+        projectionStore.createPerson(new ProjectionPerson(MOTHER_ID, FAMILY_ID, "Mother", Gender.FEMALE, 1965, null, false));
+        projectionStore.createPerson(new ProjectionPerson(CHILD1_ID, FAMILY_ID, "Child1", Gender.MALE, 1990, null, false));
+        projectionStore.createPerson(new ProjectionPerson(CHILD2_ID, FAMILY_ID, "Child2", Gender.FEMALE, 1992, null, false));
+        projectionStore.createPerson(new ProjectionPerson(CHILD3_ID, FAMILY_ID, "Child3", Gender.MALE, 1994, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD3_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD3_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        String response = mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
+                        .param("rootPersonId", FATHER_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.siblings").isArray())
+                .andExpect(jsonPath("$.siblings.length()").value(3))
+                .andReturn().getResponse().getContentAsString();
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(response);
+        com.fasterxml.jackson.databind.JsonNode siblings = root.get("siblings");
+
+        for (com.fasterxml.jackson.databind.JsonNode sibling : siblings) {
+            String personId = sibling.get("personId").asText();
+            String siblingId = sibling.get("siblingId").asText();
+            org.assertj.core.api.Assertions.assertThat(personId.compareTo(siblingId))
+                    .as("personId (%s) should be lexicographically less than siblingId (%s)", personId, siblingId)
+                    .isLessThan(0);
+        }
+    }
+
+    /**
+     * Test 15: Mixed visible and hidden parents - only visible in sharedParentIds.
+     * Father is visible, mother is hidden → paternal_half (if share only father)
+     * or full (if share both) with only father in sharedParentIds.
+     */
+    @Test
+    void mixedVisibleAndHiddenParents_onlyVisibleInSharedParentIds() throws Exception {
+        projectionStore.createPerson(new ProjectionPerson(FATHER_ID, FAMILY_ID, "Visible Father", Gender.MALE, 1960, null, false));
+        projectionStore.createPerson(new ProjectionPerson(MOTHER_ID, FAMILY_ID, "Hidden Mother", Gender.FEMALE, 1965, null, true));
+        projectionStore.createPerson(new ProjectionPerson(CHILD1_ID, FAMILY_ID, "Child1", Gender.MALE, 1990, null, false));
+        projectionStore.createPerson(new ProjectionPerson(CHILD2_ID, FAMILY_ID, "Child2", Gender.FEMALE, 1992, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD1_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, FATHER_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.FATHER, null, false));
+        projectionStore.createRelationship(new ProjectionRelationship(
+                UUID.randomUUID(), FAMILY_ID, MOTHER_ID, CHILD2_ID,
+                ParentChildSubtype.BIOLOGICAL, ParentRole.MOTHER, null, false));
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/graph")
+                        .header(AUTH_HEADER, bearerToken(MEMBER_USER_ID))
+                        .param("rootPersonId", CHILD1_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.siblings").isArray())
+                .andExpect(jsonPath("$.siblings.length()").value(1))
+                .andExpect(jsonPath("$.siblings[0].kind").value("full"))
+                .andExpect(jsonPath("$.siblings[0].sharedParentIds", hasSize(1)))
+                .andExpect(jsonPath("$.siblings[0].sharedParentIds", hasItem(FATHER_ID.toString())))
+                .andExpect(jsonPath("$.siblings[0].sharedParentIds", not(hasItem(MOTHER_ID.toString()))));
+    }
 }

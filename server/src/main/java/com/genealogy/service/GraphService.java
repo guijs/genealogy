@@ -237,16 +237,19 @@ public class GraphService {
      * P0 derivation rules:
      * - Only biological parent edges (not adoptive)
      * - Dissolved edges do not participate
-     * - Hidden persons are excluded
+     * - Hidden affects sibling endpoints only: if either child in a pair is hidden, omit that pair
+     * - Hidden biological parents STILL participate as derivation keys (shared bio father/mother)
      * - Share both biological parents → full sibling
      * - Share only biological father → paternal_half
      * - Share only biological mother → maternal_half
      * - Pairs are emitted once with canonicalized IDs (personId < siblingId)
+     * - sharedParentIds omits hidden parent ids for privacy
      */
     private List<DerivedSiblingDTO> deriveSiblings(Map<UUID, ProjectionRelationship> relationships,
                                                     Map<UUID, ProjectionPerson> persons) {
         Map<UUID, Set<UUID>> bioFathers = new HashMap<>();
         Map<UUID, Set<UUID>> bioMothers = new HashMap<>();
+        Set<UUID> hiddenParentIds = new HashSet<>();
 
         for (ProjectionRelationship r : relationships.values()) {
             if (r.isDissolved()) {
@@ -264,8 +267,12 @@ public class GraphService {
             if (child == null || parent == null) {
                 continue;
             }
-            if (child.isHidden() || parent.isHidden()) {
+            if (child.isHidden()) {
                 continue;
+            }
+
+            if (parent.isHidden()) {
+                hiddenParentIds.add(parentId);
             }
 
             ParentRole role = r.getRole();
@@ -348,7 +355,9 @@ public class GraphService {
                     Set<UUID> commonFathers = new HashSet<>(personFatherSet);
                     commonFathers.retainAll(siblingFatherSet);
                     for (UUID fid : commonFathers) {
-                        sharedParentIds.add(fid.toString());
+                        if (!hiddenParentIds.contains(fid)) {
+                            sharedParentIds.add(fid.toString());
+                        }
                     }
 
                     Set<UUID> personMotherSet = bioMothers.getOrDefault(personId, Collections.emptySet());
@@ -356,7 +365,9 @@ public class GraphService {
                     Set<UUID> commonMothers = new HashSet<>(personMotherSet);
                     commonMothers.retainAll(siblingMotherSet);
                     for (UUID mid : commonMothers) {
-                        sharedParentIds.add(mid.toString());
+                        if (!hiddenParentIds.contains(mid)) {
+                            sharedParentIds.add(mid.toString());
+                        }
                     }
                 } else if (sharesFather) {
                     kind = DerivedSiblingDTO.SiblingKind.paternal_half;
@@ -365,7 +376,9 @@ public class GraphService {
                     Set<UUID> commonFathers = new HashSet<>(personFatherSet);
                     commonFathers.retainAll(siblingFatherSet);
                     for (UUID fid : commonFathers) {
-                        sharedParentIds.add(fid.toString());
+                        if (!hiddenParentIds.contains(fid)) {
+                            sharedParentIds.add(fid.toString());
+                        }
                     }
                 } else {
                     kind = DerivedSiblingDTO.SiblingKind.maternal_half;
@@ -374,7 +387,9 @@ public class GraphService {
                     Set<UUID> commonMothers = new HashSet<>(personMotherSet);
                     commonMothers.retainAll(siblingMotherSet);
                     for (UUID mid : commonMothers) {
-                        sharedParentIds.add(mid.toString());
+                        if (!hiddenParentIds.contains(mid)) {
+                            sharedParentIds.add(mid.toString());
+                        }
                     }
                 }
 
