@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.genealogy.mapper.StoryCommentMapper">
+
+    <resultMap id="commentRowResultMap" type="com.genealogy.mapper.StoryCommentMapper$CommentRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="story_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="parent_comment_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="author_user_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="body" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insertComment">
+        INSERT INTO story_comments (id, story_id, parent_comment_id, author_user_id, body)
+        VALUES (#{id}, #{storyId}, #{parentCommentId}, #{authorUserId}, #{body})
+    </insert>
+
+    <select id="findById" resultMap="commentRowResultMap">
+        SELECT id, story_id, parent_comment_id, author_user_id, body, created_at
+        FROM story_comments WHERE id = #{id}
+    </select>
+
+    <select id="findByIdAndStoryId" resultMap="commentRowResultMap">
+        SELECT id, story_id, parent_comment_id, author_user_id, body, created_at
+        FROM story_comments WHERE id = #{id} AND story_id = #{storyId}
+    </select>
+
+    <select id="findByStoryId" resultMap="commentRowResultMap">
+        SELECT id, story_id, parent_comment_id, author_user_id, body, created_at
+        FROM story_comments WHERE story_id = #{storyId}
+        ORDER BY created_at ASC
+    </select>
+
+    <delete id="deleteById">
+        DELETE FROM story_comments WHERE id = #{id}
+    </delete>
+
+    <delete id="deleteByStoryId">
+        DELETE FROM story_comments WHERE story_id = #{storyId}
+    </delete>
+
+    <delete id="deleteAll">
+        DELETE FROM story_comments
+    </delete>
+
+</mapper>
