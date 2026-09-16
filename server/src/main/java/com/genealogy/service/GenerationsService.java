@@ -56,6 +56,14 @@ public class GenerationsService {
             allPersonsInFamily.put(p.getId(), p);
         }
 
+        // Batch-preload all relationships to avoid N+1 edge queries during BFS
+        Map<UUID, List<ProjectionRelationship>> parentsByChildId = new HashMap<>();
+        Map<UUID, List<ProjectionRelationship>> childrenByParentId = new HashMap<>();
+        for (ProjectionRelationship r : projectionStore.getRelationshipsByFamily(familyId)) {
+            parentsByChildId.computeIfAbsent(r.getChildId(), k -> new ArrayList<>()).add(r);
+            childrenByParentId.computeIfAbsent(r.getParentId(), k -> new ArrayList<>()).add(r);
+        }
+
         ProjectionPerson focusPerson;
 
         if (focusPersonId != null) {
@@ -90,7 +98,7 @@ public class GenerationsService {
             UUID currentId = entry.personId;
             int currentIndex = entry.generationIndex;
 
-            List<ProjectionRelationship> parentRels = projectionStore.getParentsOf(currentId);
+            List<ProjectionRelationship> parentRels = parentsByChildId.getOrDefault(currentId, List.of());
             for (ProjectionRelationship r : parentRels) {
                 if (!r.getFamilyId().equals(familyId)) {
                     continue;
@@ -123,7 +131,7 @@ public class GenerationsService {
                 }
             }
 
-            List<ProjectionRelationship> childRels = projectionStore.getChildrenOf(currentId);
+            List<ProjectionRelationship> childRels = childrenByParentId.getOrDefault(currentId, List.of());
             for (ProjectionRelationship r : childRels) {
                 if (!r.getFamilyId().equals(familyId)) {
                     continue;

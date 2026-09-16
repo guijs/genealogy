@@ -47,9 +47,9 @@ class FamilyControllerTest extends BaseIntegrationTest {
         personStore.addPerson(new Person(PERSON2_ID, FAMILY_ID, "Jane", "Doe"));
     }
 
-    // Test 1: No X-User-Id → 401 on GetFamily
+    // Test 1: No auth header → 401 on GetFamily
     @Test
-    void getFamily_withoutUserIdHeader_returns401() throws Exception {
+    void getFamily_withoutAuthHeader_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("authentication required"));

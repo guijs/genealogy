@@ -2,6 +2,7 @@ package com.genealogy.web;
 
 import com.genealogy.store.LocalObjectStore;
 import com.genealogy.store.MediaUploadToken;
+import com.genealogy.store.PathTraversalException;
 import com.genealogy.web.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -58,6 +59,9 @@ public class MediaUploadController {
         try {
             localObjectStore.storeFile(uploadToken.getStorageKey(), request.getInputStream(), contentLength);
             return ResponseEntity.status(HttpStatus.CREATED).build();
+        } catch (PathTraversalException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("invalid storage key"));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new ErrorResponse("failed to store file"));

@@ -332,4 +332,27 @@ class LocalMediaUploadTest extends BaseIntegrationTest {
             assertTrue(localObjectStore.fileExists(storageKey), "File " + i + " should exist on disk");
         }
     }
+
+    @Test
+    void putWithPathTraversalKey_returns400() throws Exception {
+        long validExpiry = Instant.now().getEpochSecond() + 3600;
+        String maliciousStorageKey = "../../../etc/passwd";
+
+        MediaUploadToken traversalToken = new MediaUploadToken(
+                maliciousStorageKey,
+                "image/jpeg",
+                5 * 1024 * 1024,
+                FAMILY_ID,
+                validExpiry
+        );
+        String encodedToken = traversalToken.encode(mediaStorageProperties.getUploadSecret());
+
+        byte[] fileContent = new byte[1024];
+
+        mockMvc.perform(put("/api/v1/media/uploads/" + encodedToken)
+                        .contentType("image/jpeg")
+                        .content(fileContent))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid storage key"));
+    }
 }
