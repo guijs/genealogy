@@ -234,15 +234,37 @@ cd web
 cp .env.example .env.local
 ```
 
+有两种方式连接后端 API：
+
+#### 方式 A：直连后端（依赖后端 CORS）
+
 编辑 `.env.local`：
 
 ```bash
 # 启用真实 API
 VITE_USE_GRAPH_API=true
 
-# API 基址（后端地址）
+# 直连后端地址
 VITE_GRAPH_API_BASE=http://localhost:8080
 ```
+
+后端 `SecurityConfig` 已配置 CORS，允许来自 `localhost:5173` 和 `localhost:5174` 的跨域请求。
+
+#### 方式 B：通过 Vite 代理（无需 CORS）
+
+编辑 `.env.local`：
+
+```bash
+# 启用真实 API
+VITE_USE_GRAPH_API=true
+
+# 留空，使用相对路径走代理
+VITE_GRAPH_API_BASE=
+```
+
+`vite.config.ts` 中配置的 `proxy` 会将 `/api/*` 和 `/healthz` 请求转发到 `http://localhost:8080`。此方式绕过浏览器 CORS 检查，适合后端 CORS 不可用或调试跨域问题时使用。
+
+---
 
 重启前端开发服务器使配置生效。
 
