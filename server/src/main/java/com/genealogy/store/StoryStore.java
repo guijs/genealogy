@@ -17,6 +17,12 @@ public class StoryStore {
         this.storyMapper = storyMapper;
     }
 
+    public sealed interface WriteResult {
+        record Success() implements WriteResult {}
+        record NotFound() implements WriteResult {}
+        record VersionConflict(Story currentStory) implements WriteResult {}
+    }
+
     public void createStory(Story story) {
         storyMapper.insertStory(
                 story.getId(),
@@ -70,23 +76,42 @@ public class StoryStore {
         return stories;
     }
 
-    public void updateStory(Story story) {
-        storyMapper.updateStory(
+    public WriteResult updateStory(Story story, int expectedVersion) {
+        int rowsAffected = storyMapper.updateStory(
                 story.getId(),
                 story.getTitle(),
                 story.getBody(),
                 story.getNarrativeTime(),
                 story.getUpdatedBy(),
-                story.getVersion()
+                expectedVersion
         );
+
+        if (rowsAffected == 0) {
+            Optional<Story> current = getStory(story.getId());
+            if (current.isEmpty()) {
+                return new WriteResult.NotFound();
+            }
+            return new WriteResult.VersionConflict(current.get());
+        }
+
         storyMapper.deleteStoryPersons(story.getId());
         for (UUID personId : story.getPersonIds()) {
             storyMapper.insertStoryPerson(story.getId(), personId);
         }
+        return new WriteResult.Success();
     }
 
-    public void deleteStory(UUID id) {
-        storyMapper.deleteById(id);
+    public WriteResult deleteStory(UUID id, int expectedVersion) {
+        int rowsAffected = storyMapper.deleteById(id, expectedVersion);
+
+        if (rowsAffected == 0) {
+            Optional<Story> current = getStory(id);
+            if (current.isEmpty()) {
+                return new WriteResult.NotFound();
+            }
+            return new WriteResult.VersionConflict(current.get());
+        }
+        return new WriteResult.Success();
     }
 
     public void clear() {

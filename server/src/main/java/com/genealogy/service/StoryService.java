@@ -116,11 +116,17 @@ public class StoryService {
                 updaterId,
                 existing.getCreatedAt(),
                 null,
-                existing.getVersion() + 1,
+                expectedVersion + 1,
                 personIds != null ? personIds : List.of()
         );
 
-        storyStore.updateStory(updated);
+        StoryStore.WriteResult result = storyStore.updateStory(updated, expectedVersion);
+        if (result instanceof StoryStore.WriteResult.NotFound) {
+            throw new StoryNotFoundException();
+        } else if (result instanceof StoryStore.WriteResult.VersionConflict conflict) {
+            throw new VersionConflictException(conflict.currentStory());
+        }
+
         return storyStore.getStory(storyId).orElseThrow(StoryNotFoundException::new);
     }
 
@@ -136,7 +142,12 @@ public class StoryService {
             throw new VersionConflictException(existing);
         }
 
-        storyStore.deleteStory(storyId);
+        StoryStore.WriteResult result = storyStore.deleteStory(storyId, expectedVersion);
+        if (result instanceof StoryStore.WriteResult.NotFound) {
+            throw new StoryNotFoundException();
+        } else if (result instanceof StoryStore.WriteResult.VersionConflict conflict) {
+            throw new VersionConflictException(conflict.currentStory());
+        }
     }
 
     @Transactional(readOnly = true)
