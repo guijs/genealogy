@@ -21,6 +21,8 @@ public interface CommentMentionMapper {
 
     void deleteByCommentId(@Param("commentId") UUID commentId);
 
+    void deleteByCommentIdAndUserIds(@Param("commentId") UUID commentId, @Param("userIds") List<UUID> userIds);
+
     void deleteAll();
 
     record MentionRow(

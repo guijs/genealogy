@@ -5,6 +5,7 @@ import com.genealogy.domain.story.StoryComment;
 import com.genealogy.mapper.CommentMentionMapper;
 import com.genealogy.mapper.FamilyMemberMapper;
 import com.genealogy.mapper.StoryCommentMapper;
+import com.genealogy.service.MentionUpdateAction;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -88,7 +89,7 @@ public class StoryCommentStore {
     }
 
     public WriteResult updateComment(UUID id, String body, Instant expectedUpdatedAt,
-                                     List<MentionInput> mentions, UUID familyId) {
+                                     MentionUpdateAction mentionAction, UUID familyId) {
         int rowsAffected = commentMapper.updateComment(id, body, expectedUpdatedAt);
 
         if (rowsAffected == 0) {
@@ -99,9 +100,39 @@ public class StoryCommentStore {
             return new WriteResult.VersionConflict(current.get());
         }
 
-        mentionMapper.deleteByCommentId(id);
-        if (mentions != null) {
-            for (MentionInput mention : mentions) {
+        if (mentionAction instanceof MentionUpdateAction.Omit) {
+            // Do not touch existing mentions - only body/version was updated
+        } else if (mentionAction instanceof MentionUpdateAction.ClearAll) {
+            // Clear all mentions including historical left/removed
+            mentionMapper.deleteByCommentId(id);
+        } else if (mentionAction instanceof MentionUpdateAction.Replace replace) {
+            // Replace only active/current-member mentions, preserve left/removed mentions
+            List<MentionUpdateAction.Replace.MentionInput> newMentions = replace.mentions();
+
+            // Get current mentions
+            List<CommentMentionMapper.MentionRow> existingRows = mentionMapper.findByCommentId(id);
+
+            // Identify current member user_ids from existing mentions
+            Set<UUID> existingUserIds = existingRows.stream()
+                    .map(CommentMentionMapper.MentionRow::userId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+            // Identify which existing users are still current members
+            Set<UUID> currentMemberUserIds = new HashSet<>();
+            for (UUID userId : existingUserIds) {
+                if (familyMemberMapper.existsByFamilyAndUser(familyId, userId)) {
+                    currentMemberUserIds.add(userId);
+                }
+            }
+
+            // Delete mentions for current members only (preserve left/removed members)
+            if (!currentMemberUserIds.isEmpty()) {
+                mentionMapper.deleteByCommentIdAndUserIds(id, new ArrayList<>(currentMemberUserIds));
+            }
+
+            // Insert new mentions
+            for (MentionUpdateAction.Replace.MentionInput mention : newMentions) {
                 mentionMapper.insert(
                         UUID.randomUUID(),
                         id,
