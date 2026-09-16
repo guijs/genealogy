@@ -1,6 +1,8 @@
 package com.genealogy.domain.story;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 public class StoryComment {
@@ -10,15 +12,22 @@ public class StoryComment {
     private final String body;
     private final Instant createdAt;
     private final Instant updatedAt;
+    private final List<CommentMention> mentions;
 
     public StoryComment(UUID id, UUID storyId, UUID authorUserId, String body,
                         Instant createdAt, Instant updatedAt) {
+        this(id, storyId, authorUserId, body, createdAt, updatedAt, Collections.emptyList());
+    }
+
+    public StoryComment(UUID id, UUID storyId, UUID authorUserId, String body,
+                        Instant createdAt, Instant updatedAt, List<CommentMention> mentions) {
         this.id = id;
         this.storyId = storyId;
         this.authorUserId = authorUserId;
         this.body = body;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.mentions = mentions != null ? mentions : Collections.emptyList();
     }
 
     public UUID getId() {
@@ -43,5 +52,9 @@ public class StoryComment {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public List<CommentMention> getMentions() {
+        return mentions;
     }
 }

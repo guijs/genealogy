@@ -3,11 +3,7 @@ package com.genealogy.web;
 import com.genealogy.domain.family.Membership;
 import com.genealogy.domain.story.StoryComment;
 import com.genealogy.service.StoryCommentService;
-import com.genealogy.web.dto.CommentResponse;
-import com.genealogy.web.dto.CommentsListResponse;
-import com.genealogy.web.dto.CreateCommentRequest;
-import com.genealogy.web.dto.ErrorResponse;
-import com.genealogy.web.dto.UpdateCommentRequest;
+import com.genealogy.web.dto.*;
 import com.genealogy.web.filter.FamilyMembershipFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -109,18 +105,28 @@ public class StoryCommentController {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         }
 
+        List<StoryCommentService.MentionInput> mentions;
+        try {
+            mentions = parseMentions(body.getMentions());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+
         try {
             StoryComment comment = commentService.createComment(
                     familyId,
                     storyUUID,
                     membership.getUserId(),
                     body.getBody(),
+                    mentions,
                     membership.getRole()
             );
             return ResponseEntity.status(201).body(CommentResponse.fromComment(comment));
         } catch (StoryCommentService.StoryNotFoundException e) {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         } catch (StoryCommentService.InvalidBodyException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (StoryCommentService.InvalidMentionException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.PermissionDeniedException e) {
             return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
@@ -162,6 +168,13 @@ public class StoryCommentController {
             return ResponseEntity.badRequest().body(new ErrorResponse("invalid updated_at format, expected ISO-8601"));
         }
 
+        List<StoryCommentService.MentionInput> mentions;
+        try {
+            mentions = parseMentions(body.getMentions());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+
         try {
             StoryComment comment = commentService.updateComment(
                     familyId,
@@ -169,6 +182,7 @@ public class StoryCommentController {
                     commentUUID,
                     membership.getUserId(),
                     body.getBody(),
+                    mentions,
                     expectedUpdatedAt,
                     membership.getRole()
             );
@@ -178,6 +192,8 @@ public class StoryCommentController {
         } catch (StoryCommentService.CommentNotFoundException e) {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         } catch (StoryCommentService.InvalidBodyException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (StoryCommentService.InvalidMentionException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.PermissionDeniedException e) {
             return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
@@ -227,5 +243,25 @@ public class StoryCommentController {
         } catch (StoryCommentService.PermissionDeniedException e) {
             return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
         }
+    }
+
+    private List<StoryCommentService.MentionInput> parseMentions(List<MentionRequest> mentionRequests) {
+        if (mentionRequests == null || mentionRequests.isEmpty()) {
+            return null;
+        }
+
+        return mentionRequests.stream()
+                .map(m -> {
+                    UUID userId = null;
+                    if (m.getUserId() != null && !m.getUserId().isBlank()) {
+                        try {
+                            userId = UUID.fromString(m.getUserId());
+                        } catch (IllegalArgumentException e) {
+                            throw new IllegalArgumentException("invalid user_id format");
+                        }
+                    }
+                    return new StoryCommentService.MentionInput(userId, m.getDisplayNameSnapshot());
+                })
+                .collect(Collectors.toList());
     }
 }
