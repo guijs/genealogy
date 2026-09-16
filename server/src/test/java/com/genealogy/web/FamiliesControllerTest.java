@@ -325,4 +325,31 @@ class FamiliesControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.families[0].id").value(familyId))
                 .andExpect(jsonPath("$.families[0].progenitor_person_id").isEmpty());
     }
+
+    @Test
+    void listFamilies_afterPutGenerationNamesWithAlignB_includesGenerationNamesAndAlign() throws Exception {
+        MvcResult createResult = mockMvc.perform(post("/api/v1/families")
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"Generation Names Test Family\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String familyId = new ObjectMapper().readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+
+        mockMvc.perform(put("/api/v1/families/" + familyId + "/generation-names")
+                        .header(AUTH_HEADER, bearerToken(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"generation_names\":[\"德\",\"仁\",\"义\"],\"generation_name_align\":\"B\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/families")
+                        .header(AUTH_HEADER, bearerToken(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.families[0].id").value(familyId))
+                .andExpect(jsonPath("$.families[0].generation_names[0]").value("德"))
+                .andExpect(jsonPath("$.families[0].generation_names[1]").value("仁"))
+                .andExpect(jsonPath("$.families[0].generation_names[2]").value("义"))
+                .andExpect(jsonPath("$.families[0].generation_name_align").value("B"));
+    }
 }
