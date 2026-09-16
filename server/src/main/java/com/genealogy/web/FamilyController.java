@@ -4,9 +4,11 @@ import com.genealogy.domain.family.Family;
 import com.genealogy.domain.family.Membership;
 import com.genealogy.domain.family.Role;
 import com.genealogy.domain.person.Person;
+import com.genealogy.domain.projection.ProjectionPerson;
 import com.genealogy.service.PersonService;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
+import com.genealogy.store.ProjectionStore;
 import com.genealogy.web.dto.AddMemberRequest;
 import com.genealogy.web.dto.AddMemberResponse;
 import com.genealogy.web.dto.CreatePersonRequest;
@@ -15,6 +17,8 @@ import com.genealogy.web.dto.FamilyResponse;
 import com.genealogy.web.dto.HidePersonRequest;
 import com.genealogy.web.dto.MemberResponse;
 import com.genealogy.web.dto.MembersListResponse;
+import com.genealogy.web.dto.PersonRefCandidateResponse;
+import com.genealogy.web.dto.PersonRefCandidatesResponse;
 import com.genealogy.web.dto.PersonResponse;
 import com.genealogy.web.dto.PersonsListResponse;
 import com.genealogy.web.dto.UpdateMemberRoleRequest;
@@ -37,11 +41,14 @@ public class FamilyController {
     private final FamilyStore familyStore;
     private final PersonStore personStore;
     private final PersonService personService;
+    private final ProjectionStore projectionStore;
 
-    public FamilyController(FamilyStore familyStore, PersonStore personStore, PersonService personService) {
+    public FamilyController(FamilyStore familyStore, PersonStore personStore,
+                            PersonService personService, ProjectionStore projectionStore) {
         this.familyStore = familyStore;
         this.personStore = personStore;
         this.personService = personService;
+        this.projectionStore = projectionStore;
     }
 
     @GetMapping
@@ -82,6 +89,28 @@ public class FamilyController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(new PersonsListResponse(personResponses));
+    }
+
+    @GetMapping("/person-ref-candidates")
+    public ResponseEntity<?> listPersonRefCandidates(HttpServletRequest request) {
+        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
+        if (familyId == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        Membership membership = (Membership) request.getAttribute(FamilyMembershipFilter.MEMBERSHIP_ATTRIBUTE);
+        if (membership == null) {
+            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
+        }
+
+        Role userRole = membership.getRole();
+        List<ProjectionPerson> allPersons = projectionStore.getPersonsByFamily(familyId);
+        List<PersonRefCandidateResponse> candidates = allPersons.stream()
+                .filter(p -> !p.isHidden() || userRole.canWrite())
+                .map(PersonRefCandidateResponse::fromProjectionPerson)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(new PersonRefCandidatesResponse(candidates));
     }
 
     @PostMapping("/persons")
