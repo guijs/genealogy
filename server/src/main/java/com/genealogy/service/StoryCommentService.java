@@ -3,14 +3,14 @@ package com.genealogy.service;
 import com.genealogy.domain.family.Role;
 import com.genealogy.domain.story.Story;
 import com.genealogy.domain.story.StoryComment;
+import com.genealogy.store.FamilyStore;
 import com.genealogy.store.StoryCommentStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class StoryCommentService {
@@ -18,10 +18,12 @@ public class StoryCommentService {
 
     private final StoryCommentStore commentStore;
     private final StoryService storyService;
+    private final FamilyStore familyStore;
 
-    public StoryCommentService(StoryCommentStore commentStore, StoryService storyService) {
+    public StoryCommentService(StoryCommentStore commentStore, StoryService storyService, FamilyStore familyStore) {
         this.commentStore = commentStore;
         this.storyService = storyService;
+        this.familyStore = familyStore;
     }
 
     public static class CommentNotFoundException extends RuntimeException {
@@ -67,9 +69,17 @@ public class StoryCommentService {
         }
     }
 
+    public static class InvalidMentionException extends RuntimeException {
+        public InvalidMentionException(String message) {
+            super(message);
+        }
+    }
+
+    public record MentionInput(UUID userId, String displayNameSnapshot) {}
+
     @Transactional
     public StoryComment createComment(UUID familyId, UUID storyId, UUID authorUserId,
-                                      String body, Role userRole) {
+                                      String body, List<MentionInput> mentions, Role userRole) {
         if (!userRole.canWrite()) {
             throw new PermissionDeniedException("only admin or editor can create comments");
         }
@@ -80,6 +90,7 @@ public class StoryCommentService {
         }
 
         validateBody(body);
+        validateMentions(familyId, mentions);
 
         UUID commentId = UUID.randomUUID();
         StoryComment comment = new StoryComment(
@@ -91,14 +102,20 @@ public class StoryCommentService {
                 null
         );
 
-        commentStore.createComment(comment);
-        return commentStore.getComment(commentId).orElseThrow(CommentNotFoundException::new);
+        List<StoryCommentStore.MentionInput> storeMentions = mentions != null
+                ? mentions.stream()
+                    .map(m -> new StoryCommentStore.MentionInput(m.userId(), m.displayNameSnapshot()))
+                    .collect(Collectors.toList())
+                : null;
+
+        commentStore.createComment(comment, storeMentions);
+        return commentStore.getComment(commentId, familyId).orElseThrow(CommentNotFoundException::new);
     }
 
     @Transactional
     public StoryComment updateComment(UUID familyId, UUID storyId, UUID commentId,
-                                      UUID requestingUserId, String body, Instant expectedUpdatedAt,
-                                      Role userRole) {
+                                      UUID requestingUserId, String body, List<MentionInput> mentions,
+                                      Instant expectedUpdatedAt, Role userRole) {
         if (!userRole.canWrite()) {
             throw new PermissionDeniedException("write access required");
         }
@@ -108,7 +125,7 @@ public class StoryCommentService {
             throw new StoryNotFoundException();
         }
 
-        Optional<StoryComment> existingOpt = commentStore.getCommentByIdAndStoryId(commentId, storyId);
+        Optional<StoryComment> existingOpt = commentStore.getCommentByIdAndStoryId(commentId, storyId, familyId);
         if (existingOpt.isEmpty()) {
             throw new CommentNotFoundException();
         }
@@ -120,15 +137,22 @@ public class StoryCommentService {
         }
 
         validateBody(body);
+        validateMentions(familyId, mentions);
 
-        StoryCommentStore.WriteResult result = commentStore.updateComment(commentId, body, expectedUpdatedAt);
+        List<StoryCommentStore.MentionInput> storeMentions = mentions != null
+                ? mentions.stream()
+                    .map(m -> new StoryCommentStore.MentionInput(m.userId(), m.displayNameSnapshot()))
+                    .collect(Collectors.toList())
+                : null;
+
+        StoryCommentStore.WriteResult result = commentStore.updateComment(commentId, body, expectedUpdatedAt, storeMentions, familyId);
         if (result instanceof StoryCommentStore.WriteResult.NotFound) {
             throw new CommentNotFoundException();
         } else if (result instanceof StoryCommentStore.WriteResult.VersionConflict conflict) {
             throw new VersionConflictException(conflict.currentComment());
         }
 
-        return commentStore.getComment(commentId).orElseThrow(CommentNotFoundException::new);
+        return commentStore.getComment(commentId, familyId).orElseThrow(CommentNotFoundException::new);
     }
 
     @Transactional
@@ -143,7 +167,7 @@ public class StoryCommentService {
             throw new StoryNotFoundException();
         }
 
-        Optional<StoryComment> existingOpt = commentStore.getCommentByIdAndStoryId(commentId, storyId);
+        Optional<StoryComment> existingOpt = commentStore.getCommentByIdAndStoryId(commentId, storyId, familyId);
         if (existingOpt.isEmpty()) {
             throw new CommentNotFoundException();
         }
@@ -169,7 +193,7 @@ public class StoryCommentService {
             return Optional.empty();
         }
 
-        return commentStore.getCommentByIdAndStoryId(commentId, storyId);
+        return commentStore.getCommentByIdAndStoryId(commentId, storyId, familyId);
     }
 
     @Transactional(readOnly = true)
@@ -179,7 +203,7 @@ public class StoryCommentService {
             throw new StoryNotFoundException();
         }
 
-        return commentStore.listByStoryId(storyId);
+        return commentStore.listByStoryId(storyId, familyId);
     }
 
     private void validateBody(String body) {
@@ -188,6 +212,24 @@ public class StoryCommentService {
         }
         if (body.length() > MAX_BODY_LENGTH) {
             throw new InvalidBodyException("body exceeds maximum length of " + MAX_BODY_LENGTH + " characters");
+        }
+    }
+
+    private void validateMentions(UUID familyId, List<MentionInput> mentions) {
+        if (mentions == null || mentions.isEmpty()) {
+            return;
+        }
+
+        for (MentionInput mention : mentions) {
+            if (mention.userId() == null) {
+                throw new InvalidMentionException("mention user_id is required");
+            }
+            if (mention.displayNameSnapshot() == null || mention.displayNameSnapshot().isBlank()) {
+                throw new InvalidMentionException("mention display_name_snapshot is required");
+            }
+            if (!familyStore.isMember(familyId, mention.userId())) {
+                throw new InvalidMentionException("mentioned user is not a current family member");
+            }
         }
     }
 }

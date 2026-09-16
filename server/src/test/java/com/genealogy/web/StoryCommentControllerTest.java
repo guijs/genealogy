@@ -748,6 +748,451 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.comments[2].body").value("Third comment"));
     }
 
+    // ====================
+    // MENTIONS TESTS (P1 MVP v0.2)
+    // ====================
+
+    // AP-M1: editor 键入 @ 选本家族当前成员 User 并发评 → 成功；mentions 含该 user_id
+    @Test
+    void apM1_createComment_withValidMention_returns201() throws Exception {
+        String body = """
+            {
+                "body": "Hello @Editor, check this out!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Editor User"
+                    }
+                ]
+            }
+            """.formatted(EDITOR_USER_ID);
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.body").value("Hello @Editor, check this out!"))
+                .andExpect(jsonPath("$.mentions", hasSize(1)))
+                .andExpect(jsonPath("$.mentions[0].user_id").value(EDITOR_USER_ID.toString()))
+                .andExpect(jsonPath("$.mentions[0].display_name_snapshot").value("Editor User"))
+                .andExpect(jsonPath("$.mentions[0].status").value("active"));
+    }
+
+    // AP-M2: viewer 尝试带 mention 发评 → 拒绝
+    @Test
+    void apM2_createComment_viewerWithMention_returns403() throws Exception {
+        String body = """
+            {
+                "body": "Hello @Admin!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Admin User"
+                    }
+                ]
+            }
+            """.formatted(ADMIN_USER_ID);
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isForbidden());
+    }
+
+    // AP-M3: 提交已退出 / 非本家族 / 非 User → 400
+    @Test
+    void apM3_createComment_withNonMemberMention_returns400() throws Exception {
+        String body = """
+            {
+                "body": "Hello @NonMember!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Non Member"
+                    }
+                ]
+            }
+            """.formatted(NON_MEMBER_USER_ID);
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("mentioned user is not a current family member"));
+    }
+
+    @Test
+    void apM3_createComment_withRandomUUID_returns400() throws Exception {
+        UUID randomUUID = UUID.randomUUID();
+        String body = """
+            {
+                "body": "Hello @Random!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Random Person"
+                    }
+                ]
+            }
+            """.formatted(randomUUID);
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("mentioned user is not a current family member"));
+    }
+
+    // AP-M4: 手工纯文本 @张三 无选人 → 无结构化 mention
+    @Test
+    void apM4_createComment_plainTextAtMention_noStructuredMention() throws Exception {
+        String body = """
+            {
+                "body": "Hello @张三, check this out!"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.body").value("Hello @张三, check this out!"))
+                .andExpect(jsonPath("$.mentions").doesNotExist());
+    }
+
+    @Test
+    void apM4_createComment_emptyMentionsList_noStructuredMention() throws Exception {
+        String body = """
+            {
+                "body": "Hello @张三, check this out!",
+                "mentions": []
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.body").value("Hello @张三, check this out!"))
+                .andExpect(jsonPath("$.mentions").doesNotExist());
+    }
+
+    // AP-M5: 读评：被 @ 人仍为当前成员 → 高亮可点 (status=active)
+    @Test
+    void apM5_readComment_mentionedUserStillMember_statusActive() throws Exception {
+        String createBody = """
+            {
+                "body": "Hello @Editor!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Editor User"
+                    }
+                ]
+            }
+            """.formatted(EDITOR_USER_ID);
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentions[0].user_id").value(EDITOR_USER_ID.toString()))
+                .andExpect(jsonPath("$.mentions[0].status").value("active"));
+    }
+
+    // AP-M6: 被 @ 人后来退出 → 快照+失效；不可点；评论仍在 (status=left)
+    @Test
+    void apM6_readComment_mentionedUserLeft_statusLeft() throws Exception {
+        UUID tempUserId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        familyStore.addMemberWithRole(FAMILY_ID, tempUserId, Role.EDITOR);
+
+        String createBody = """
+            {
+                "body": "Hello @TempUser!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Temp User"
+                    }
+                ]
+            }
+            """.formatted(tempUserId);
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+
+        familyStore.removeMember(FAMILY_ID, tempUserId);
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Hello @TempUser!"))
+                .andExpect(jsonPath("$.mentions[0].user_id").value(tempUserId.toString()))
+                .andExpect(jsonPath("$.mentions[0].display_name_snapshot").value("Temp User"))
+                .andExpect(jsonPath("$.mentions[0].status").value("left"));
+    }
+
+    // AP-M8: 作者改己评增删 @（正确 updated_at）→ 成功；列表与 body 一致
+    @Test
+    void apM8_updateComment_addMention_success() throws Exception {
+        String createBody = """
+            {
+                "body": "Original comment without mention"
+            }
+            """;
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mentions").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
+
+        String updateBody = """
+            {
+                "body": "Updated comment with @Admin mention",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Admin User"
+                    }
+                ],
+                "updated_at": "%s"
+            }
+            """.formatted(ADMIN_USER_ID, updatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Updated comment with @Admin mention"))
+                .andExpect(jsonPath("$.mentions", hasSize(1)))
+                .andExpect(jsonPath("$.mentions[0].user_id").value(ADMIN_USER_ID.toString()));
+    }
+
+    @Test
+    void apM8_updateComment_removeMention_success() throws Exception {
+        String createBody = """
+            {
+                "body": "Comment with @Editor mention",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Editor User"
+                    }
+                ]
+            }
+            """.formatted(EDITOR_USER_ID);
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mentions", hasSize(1)))
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
+
+        String updateBody = """
+            {
+                "body": "Updated comment without mention",
+                "mentions": [],
+                "updated_at": "%s"
+            }
+            """.formatted(updatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Updated comment without mention"))
+                .andExpect(jsonPath("$.mentions").doesNotExist());
+    }
+
+    @Test
+    void apM8_updateComment_withInvalidMention_returns400() throws Exception {
+        String createBody = """
+            {
+                "body": "Original comment"
+            }
+            """;
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
+
+        String updateBody = """
+            {
+                "body": "Updated with invalid mention",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Non Member"
+                    }
+                ],
+                "updated_at": "%s"
+            }
+            """.formatted(NON_MEMBER_USER_ID, updatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("mentioned user is not a current family member"));
+    }
+
+    // List comments returns mentions
+    @Test
+    void listComments_includesMentions() throws Exception {
+        String body1 = """
+            {
+                "body": "Hello @Editor!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Editor User"
+                    }
+                ]
+            }
+            """.formatted(EDITOR_USER_ID);
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body1))
+                .andExpect(status().isCreated());
+
+        String body2 = """
+            {
+                "body": "No mention here"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body2))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.comments", hasSize(2)))
+                .andExpect(jsonPath("$.comments[0].mentions", hasSize(1)))
+                .andExpect(jsonPath("$.comments[0].mentions[0].user_id").value(EDITOR_USER_ID.toString()))
+                .andExpect(jsonPath("$.comments[1].mentions").doesNotExist());
+    }
+
+    // Mention requires display_name_snapshot
+    @Test
+    void createComment_mentionMissingDisplayName_returns400() throws Exception {
+        String body = """
+            {
+                "body": "Hello @Editor!",
+                "mentions": [
+                    {
+                        "user_id": "%s"
+                    }
+                ]
+            }
+            """.formatted(EDITOR_USER_ID);
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("mention display_name_snapshot is required"));
+    }
+
+    // Mention requires user_id
+    @Test
+    void createComment_mentionMissingUserId_returns400() throws Exception {
+        String body = """
+            {
+                "body": "Hello @Editor!",
+                "mentions": [
+                    {
+                        "display_name_snapshot": "Editor User"
+                    }
+                ]
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("mention user_id is required"));
+    }
+
+    // Multiple mentions
+    @Test
+    void createComment_multipleMentions_success() throws Exception {
+        String body = """
+            {
+                "body": "Hello @Admin and @Viewer!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Admin User"
+                    },
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Viewer User"
+                    }
+                ]
+            }
+            """.formatted(ADMIN_USER_ID, VIEWER_USER_ID);
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mentions", hasSize(2)));
+    }
+
+    // ====================
+    // END MENTIONS TESTS
+    // ====================
+
     // MAJOR-1 regression: viewer read-only even for own comments
     // Scenario: user creates comment as editor, then accesses as viewer (demoted/different token)
     // Expected: PUT own → 403, DELETE own → 403

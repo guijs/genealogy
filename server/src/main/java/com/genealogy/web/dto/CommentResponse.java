@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.genealogy.domain.story.StoryComment;
 
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class CommentResponse {
@@ -20,6 +22,8 @@ public class CommentResponse {
 
     private final String body;
 
+    private final List<MentionResponse> mentions;
+
     @JsonProperty("created_at")
     private final String createdAt;
 
@@ -27,21 +31,27 @@ public class CommentResponse {
     private final String updatedAt;
 
     public CommentResponse(String id, String storyId, String authorUserId, String body,
-                           String createdAt, String updatedAt) {
+                           List<MentionResponse> mentions, String createdAt, String updatedAt) {
         this.id = id;
         this.storyId = storyId;
         this.authorUserId = authorUserId;
         this.body = body;
+        this.mentions = mentions;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
     public static CommentResponse fromComment(StoryComment comment) {
+        List<MentionResponse> mentionResponses = comment.getMentions().stream()
+                .map(MentionResponse::fromMention)
+                .collect(Collectors.toList());
+
         return new CommentResponse(
                 comment.getId().toString(),
                 comment.getStoryId().toString(),
                 comment.getAuthorUserId().toString(),
                 comment.getBody(),
+                mentionResponses.isEmpty() ? null : mentionResponses,
                 comment.getCreatedAt() != null ? INSTANT_FORMATTER.format(comment.getCreatedAt()) : null,
                 comment.getUpdatedAt() != null ? INSTANT_FORMATTER.format(comment.getUpdatedAt()) : null
         );
@@ -61,6 +71,10 @@ public class CommentResponse {
 
     public String getBody() {
         return body;
+    }
+
+    public List<MentionResponse> getMentions() {
+        return mentions;
     }
 
     public String getCreatedAt() {
