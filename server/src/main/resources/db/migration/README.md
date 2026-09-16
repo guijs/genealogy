@@ -10,13 +10,19 @@ Migration files must follow Flyway's naming convention:
 V{version}__{description}.sql
 ```
 
-Examples:
-- `V1__create_person_table.sql`
-- `V2__add_relationship_table.sql`
-- `V3__add_family_table.sql`
+Examples (actual files in this directory):
+- `V1__initial_schema.sql`
+- `V2__users.sql`
+- `V3__progenitor.sql`
 
-## Status
+## Current Migrations
 
-**Phase 0**: No business schema migrations yet. This is a placeholder directory.
+| Version | Description |
+|---------|-------------|
+| V1 | Initial schema (families, family_members, persons, relationships, unions) |
+| V2 | Users table for JWT authentication |
+| V3 | Progenitor support |
+| V4 | Generation names |
+| V5 | Stories feature |
 
-Business domain migrations will be added in Phase 1 when CRUD operations are implemented.
+Migrations are automatically applied on Spring Boot startup via `flyway.baseline-on-migrate: true`.
