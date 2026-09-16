@@ -12,10 +12,13 @@ import org.mybatis.spring.boot.autoconfigure.ConfigurationCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.sql.Array;
 import java.sql.CallableStatement;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Configuration
@@ -30,6 +33,7 @@ public class MyBatisConfig {
             configuration.getTypeHandlerRegistry().register(MarriageStatus.class, new MarriageStatusTypeHandler());
             configuration.getTypeHandlerRegistry().register(ParentChildSubtype.class, new ParentChildSubtypeTypeHandler());
             configuration.getTypeHandlerRegistry().register(ParentRole.class, new ParentRoleTypeHandler());
+            configuration.getTypeHandlerRegistry().register(StringArrayTypeHandler.class);
         };
     }
 
@@ -249,6 +253,43 @@ public class MyBatisConfig {
                 }
             }
             return null;
+        }
+    }
+
+    @MappedTypes(List.class)
+    public static class StringArrayTypeHandler extends BaseTypeHandler<List<String>> {
+        @Override
+        public void setNonNullParameter(PreparedStatement ps, int i, List<String> parameter, JdbcType jdbcType) throws SQLException {
+            String[] array = parameter.toArray(new String[0]);
+            Array sqlArray = ps.getConnection().createArrayOf("text", array);
+            ps.setArray(i, sqlArray);
+        }
+
+        @Override
+        public List<String> getNullableResult(ResultSet rs, String columnName) throws SQLException {
+            return toList(rs.getArray(columnName));
+        }
+
+        @Override
+        public List<String> getNullableResult(ResultSet rs, int columnIndex) throws SQLException {
+            return toList(rs.getArray(columnIndex));
+        }
+
+        @Override
+        public List<String> getNullableResult(CallableStatement cs, int columnIndex) throws SQLException {
+            return toList(cs.getArray(columnIndex));
+        }
+
+        private List<String> toList(Array array) throws SQLException {
+            if (array == null) {
+                return null;
+            }
+            Object[] arr = (Object[]) array.getArray();
+            List<String> result = new ArrayList<>();
+            for (Object obj : arr) {
+                result.add(obj != null ? obj.toString() : null);
+            }
+            return result;
         }
     }
 }

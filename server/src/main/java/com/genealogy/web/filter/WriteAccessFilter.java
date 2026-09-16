@@ -54,6 +54,9 @@ public class WriteAccessFilter extends OncePerRequestFilter {
     private static final Pattern PROGENITOR_PATH_PATTERN = 
             Pattern.compile("^/api/v1/families/[^/]+/progenitor$");
 
+    private static final Pattern GENERATION_NAMES_PATH_PATTERN = 
+            Pattern.compile("^/api/v1/families/[^/]+/generation-names$");
+
     private static final Set<String> WRITE_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -118,6 +121,9 @@ public class WriteAccessFilter extends OncePerRequestFilter {
             return true;
         }
         if ("PUT".equals(method) && PROGENITOR_PATH_PATTERN.matcher(path).matches()) {
+            return true;
+        }
+        if ("PUT".equals(method) && GENERATION_NAMES_PATH_PATTERN.matcher(path).matches()) {
             return true;
         }
         return false;

@@ -80,6 +80,12 @@ public class LineageService {
     }
 
     private LineageResponse buildLineage(UUID familyId, UUID progenitorId) {
+        Optional<Family> familyOpt = familyStore.getFamily(familyId);
+        if (familyOpt.isEmpty()) {
+            return new LineageResponse(familyId.toString(), null, Collections.emptyList());
+        }
+        Family family = familyOpt.get();
+
         Optional<ProjectionPerson> progenitorOpt = projectionStore.getPerson(progenitorId);
         if (progenitorOpt.isEmpty() || !progenitorOpt.get().getFamilyId().equals(familyId)) {
             return new LineageResponse(familyId.toString(), null, Collections.emptyList());
@@ -146,6 +152,9 @@ public class LineageService {
             generationPersons.computeIfAbsent(index, k -> new ArrayList<>()).add(personId);
         }
 
+        List<String> generationNames = family.getGenerationNames();
+        String align = family.getGenerationNameAlign();
+
         List<LineageGenerationDTO> generations = new ArrayList<>();
         for (Map.Entry<Integer, List<UUID>> entry : generationPersons.entrySet()) {
             int index = entry.getKey();
@@ -168,13 +177,34 @@ public class LineageService {
 
             persons.sort(Comparator.comparing(LineagePersonDTO::getId));
 
-            generations.add(new LineageGenerationDTO(index, persons));
+            String generationName = computeGenerationName(generationNames, align, index);
+            generations.add(new LineageGenerationDTO(index, persons, generationName));
         }
 
         return new LineageResponse(
                 familyId.toString(),
                 progenitorId.toString(),
-                generations
+                generations,
+                align
         );
+    }
+
+    private String computeGenerationName(List<String> names, String align, int generationIndex) {
+        if (names == null || names.isEmpty()) {
+            return null;
+        }
+
+        int nameIndex;
+        if ("B".equals(align)) {
+            nameIndex = generationIndex - 1;
+        } else {
+            nameIndex = generationIndex - 2;
+        }
+
+        if (nameIndex < 0 || nameIndex >= names.size()) {
+            return null;
+        }
+
+        return names.get(nameIndex);
     }
 }

@@ -7,6 +7,8 @@
             <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
             <arg column="name" javaType="java.lang.String"/>
             <arg column="progenitor_person_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="generation_names" javaType="java.util.List" typeHandler="com.genealogy.config.MyBatisConfig$StringArrayTypeHandler"/>
+            <arg column="generation_name_align" javaType="java.lang.String"/>
         </constructor>
     </resultMap>
 
@@ -16,7 +18,7 @@
     </insert>
 
     <select id="findById" resultMap="familyResultMap">
-        SELECT id, name, progenitor_person_id FROM families WHERE id = #{id}
+        SELECT id, name, progenitor_person_id, generation_names, generation_name_align FROM families WHERE id = #{id}
     </select>
 
     <select id="existsById" resultType="boolean">
@@ -25,6 +27,13 @@
 
     <update id="updateProgenitor">
         UPDATE families SET progenitor_person_id = #{progenitorPersonId} WHERE id = #{id}
+    </update>
+
+    <update id="updateGenerationNames">
+        UPDATE families SET 
+            generation_names = #{generationNames, typeHandler=com.genealogy.config.MyBatisConfig$StringArrayTypeHandler},
+            generation_name_align = #{generationNameAlign}
+        WHERE id = #{id}
     </update>
 
     <delete id="deleteAll">

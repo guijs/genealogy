@@ -42,7 +42,9 @@ public class FamiliesController {
                 .map(f -> new FamilyResponse(
                         f.getId().toString(),
                         f.getName(),
-                        f.getProgenitorPersonId() != null ? f.getProgenitorPersonId().toString() : null))
+                        f.getProgenitorPersonId() != null ? f.getProgenitorPersonId().toString() : null,
+                        f.getGenerationNames(),
+                        f.getGenerationNameAlign()))
                 .toList();
 
         return ResponseEntity.ok(new FamiliesListResponse(familyResponses));

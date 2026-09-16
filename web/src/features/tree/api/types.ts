@@ -253,12 +253,16 @@ export interface LineagePersonDTO {
 export interface LineageGenerationDTO {
   index: number
   persons: LineagePersonDTO[]
+  /** Generation name (字辈) for this generation, null if not available or beyond sequence */
+  generation_name: string | null
 }
 
 export interface LineageResponse {
   family_id: string
   progenitor_person_id: string | null
   generations: LineageGenerationDTO[]
+  /** Alignment mode for generation names */
+  generation_name_align: GenerationNameAlign
 }
 
 export interface SetProgenitorRequest {
@@ -267,4 +271,27 @@ export interface SetProgenitorRequest {
 
 export interface SetProgenitorResponse {
   progenitor_person_id: string | null
+}
+
+/**
+ * P1: Generation names (字辈) alignment mode.
+ * - A (default): name index k (1-based) ↔ lineage generation k+1
+ *   (第1世始祖无字辈字；第2世用第1个字…)
+ * - B: name index k ↔ lineage generation k
+ *   (第1世用第1个字)
+ */
+export type GenerationNameAlign = 'A' | 'B'
+
+/**
+ * GET /api/v1/families/{familyId}/generation-names
+ * PUT /api/v1/families/{familyId}/generation-names
+ */
+export interface GenerationNamesRequest {
+  generation_names: string[]
+  generation_name_align?: GenerationNameAlign
+}
+
+export interface GenerationNamesResponse {
+  generation_names: string[] | null
+  generation_name_align: GenerationNameAlign
 }
