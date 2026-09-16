@@ -116,7 +116,7 @@ npm run dev
 
 ## 环境变量配置
 
-后端环境变量（可在启动时通过 `-D` 或 `export` 设置）：
+后端环境变量（通过 `export` 设置）：
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
@@ -142,12 +142,8 @@ jwt:
 启动时覆盖示例：
 
 ```bash
-# 方式 1：环境变量
 export JWT_SECRET="your-secure-random-string-at-least-32-chars"
 ./mvnw spring-boot:run
-
-# 方式 2：命令行参数
-./mvnw spring-boot:run -Djwt.secret="your-secure-random-string-at-least-32-chars"
 ```
 
 ---
@@ -246,14 +242,21 @@ VITE_USE_GRAPH_API=true
 
 # API 基址（后端地址）
 VITE_GRAPH_API_BASE=http://localhost:8080
-
-# 用户 ID（需要先注册获取）
-VITE_GRAPH_USER_ID=<your-user-uuid>
 ```
 
 重启前端开发服务器使配置生效。
 
-> **提示**：`VITE_GRAPH_USER_ID` 需要是已注册用户的 UUID，可从注册响应中获取。
+### 认证流程
+
+前端使用 **JWT Bearer Token** 认证，流程如下：
+
+1. 在前端登录页面输入邮箱和密码
+2. 登录成功后，token 自动存储在 `localStorage`（键 `auth_token`）
+3. 后续 API 请求自动携带 `Authorization: Bearer <token>` header
+
+无需手动配置 token 或 user ID — 登录后前端会自动处理认证。
+
+> **注意**：`.env.example` 中的 `VITE_GRAPH_USER_ID` 是历史遗留配置，已废弃不使用。
 
 ---
 

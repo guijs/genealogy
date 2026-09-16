@@ -10,10 +10,10 @@ Migration files must follow Flyway's naming convention:
 V{version}__{description}.sql
 ```
 
-Examples:
-- `V1__create_person_table.sql`
-- `V2__add_relationship_table.sql`
-- `V3__add_family_table.sql`
+Examples (actual files in this directory):
+- `V1__initial_schema.sql`
+- `V2__users.sql`
+- `V3__progenitor.sql`
 
 ## Current Migrations
 
