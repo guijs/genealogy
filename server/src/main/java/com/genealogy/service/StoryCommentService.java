@@ -99,6 +99,10 @@ public class StoryCommentService {
     public StoryComment updateComment(UUID familyId, UUID storyId, UUID commentId,
                                       UUID requestingUserId, String body, Instant expectedUpdatedAt,
                                       Role userRole) {
+        if (!userRole.canWrite()) {
+            throw new PermissionDeniedException("write access required");
+        }
+
         Optional<Story> storyOpt = storyService.getStory(familyId, storyId, userRole);
         if (storyOpt.isEmpty()) {
             throw new StoryNotFoundException();
@@ -130,6 +134,10 @@ public class StoryCommentService {
     @Transactional
     public void deleteComment(UUID familyId, UUID storyId, UUID commentId,
                               UUID requestingUserId, Role userRole) {
+        if (!userRole.canWrite()) {
+            throw new PermissionDeniedException("write access required");
+        }
+
         Optional<Story> storyOpt = storyService.getStory(familyId, storyId, userRole);
         if (storyOpt.isEmpty()) {
             throw new StoryNotFoundException();
