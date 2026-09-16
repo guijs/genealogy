@@ -6,30 +6,37 @@
         <constructor>
             <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
             <arg column="story_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
-            <arg column="parent_comment_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
             <arg column="author_user_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
             <arg column="body" javaType="java.lang.String"/>
             <arg column="created_at" javaType="java.time.Instant"/>
+            <arg column="updated_at" javaType="java.time.Instant"/>
         </constructor>
     </resultMap>
 
     <insert id="insertComment">
-        INSERT INTO story_comments (id, story_id, parent_comment_id, author_user_id, body)
-        VALUES (#{id}, #{storyId}, #{parentCommentId}, #{authorUserId}, #{body})
+        INSERT INTO story_comments (id, story_id, author_user_id, body)
+        VALUES (#{id}, #{storyId}, #{authorUserId}, #{body})
     </insert>
 
+    <update id="updateComment">
+        UPDATE story_comments
+        SET body = #{body},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND updated_at = #{expectedUpdatedAt}
+    </update>
+
     <select id="findById" resultMap="commentRowResultMap">
-        SELECT id, story_id, parent_comment_id, author_user_id, body, created_at
+        SELECT id, story_id, author_user_id, body, created_at, updated_at
         FROM story_comments WHERE id = #{id}
     </select>
 
     <select id="findByIdAndStoryId" resultMap="commentRowResultMap">
-        SELECT id, story_id, parent_comment_id, author_user_id, body, created_at
+        SELECT id, story_id, author_user_id, body, created_at, updated_at
         FROM story_comments WHERE id = #{id} AND story_id = #{storyId}
     </select>
 
     <select id="findByStoryId" resultMap="commentRowResultMap">
-        SELECT id, story_id, parent_comment_id, author_user_id, body, created_at
+        SELECT id, story_id, author_user_id, body, created_at, updated_at
         FROM story_comments WHERE story_id = #{storyId}
         ORDER BY created_at ASC
     </select>

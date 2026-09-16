@@ -12,9 +12,12 @@ public interface StoryCommentMapper {
 
     void insertComment(@Param("id") UUID id,
                        @Param("storyId") UUID storyId,
-                       @Param("parentCommentId") UUID parentCommentId,
                        @Param("authorUserId") UUID authorUserId,
                        @Param("body") String body);
+
+    int updateComment(@Param("id") UUID id,
+                      @Param("body") String body,
+                      @Param("expectedUpdatedAt") Instant expectedUpdatedAt);
 
     CommentRow findById(@Param("id") UUID id);
 
@@ -31,9 +34,9 @@ public interface StoryCommentMapper {
     record CommentRow(
             UUID id,
             UUID storyId,
-            UUID parentCommentId,
             UUID authorUserId,
             String body,
-            Instant createdAt
+            Instant createdAt,
+            Instant updatedAt
     ) {}
 }

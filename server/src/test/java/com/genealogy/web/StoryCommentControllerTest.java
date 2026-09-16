@@ -109,30 +109,9 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
         storyStore.createStory(hiddenStory);
     }
 
-    // AP-C1: All roles can create comment (viewer post)
+    // AP-C1: admin/editor 在可见故事下发评 → 成功
     @Test
-    void createComment_viewer_returns201() throws Exception {
-        String body = """
-            {
-                "body": "Viewer comment on story"
-            }
-            """;
-
-        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").isNotEmpty())
-                .andExpect(jsonPath("$.story_id").value(storyId.toString()))
-                .andExpect(jsonPath("$.author_user_id").value(VIEWER_USER_ID.toString()))
-                .andExpect(jsonPath("$.body").value("Viewer comment on story"))
-                .andExpect(jsonPath("$.created_at").isNotEmpty())
-                .andExpect(jsonPath("$.parent_comment_id").doesNotExist());
-    }
-
-    @Test
-    void createComment_admin_returns201() throws Exception {
+    void apC1_createComment_admin_returns201() throws Exception {
         String body = """
             {
                 "body": "Admin comment on story"
@@ -144,11 +123,16 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.author_user_id").value(ADMIN_USER_ID.toString()));
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.story_id").value(storyId.toString()))
+                .andExpect(jsonPath("$.author_user_id").value(ADMIN_USER_ID.toString()))
+                .andExpect(jsonPath("$.body").value("Admin comment on story"))
+                .andExpect(jsonPath("$.created_at").isNotEmpty())
+                .andExpect(jsonPath("$.updated_at").isNotEmpty());
     }
 
     @Test
-    void createComment_editor_returns201() throws Exception {
+    void apC1_createComment_editor_returns201() throws Exception {
         String body = """
             {
                 "body": "Editor comment on story"
@@ -160,12 +144,30 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.author_user_id").value(EDITOR_USER_ID.toString()));
+                .andExpect(jsonPath("$.author_user_id").value(EDITOR_USER_ID.toString()))
+                .andExpect(jsonPath("$.body").value("Editor comment on story"));
     }
 
-    // AP-C2: non-member cannot create comment
+    // AP-C2: viewer 发评 → 拒绝
     @Test
-    void createComment_nonMember_returns404() throws Exception {
+    void apC2_createComment_viewer_returns403() throws Exception {
+        String body = """
+            {
+                "body": "Viewer comment"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("write access required"));
+    }
+
+    // AP-C3: 非成员发评 → 拒绝
+    @Test
+    void apC3_createComment_nonMember_returns404() throws Exception {
         String body = """
             {
                 "body": "Non-member comment"
@@ -179,92 +181,162 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    // AP-C3: one-level reply ok (reply to root comment)
+    // AP-C4: 列表为单层；无回复入口 → API 无 parent
     @Test
-    void createComment_replyToRoot_returns201() throws Exception {
-        String rootBody = """
+    void apC4_listComments_returnsFlat_noParent() throws Exception {
+        String body1 = """
             {
-                "body": "Root comment"
+                "body": "First comment"
+            }
+            """;
+        String body2 = """
+            {
+                "body": "Second comment"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body1))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body2))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.comments", hasSize(2)))
+                .andExpect(jsonPath("$.comments[0].body").value("First comment"))
+                .andExpect(jsonPath("$.comments[1].body").value("Second comment"))
+                .andExpect(jsonPath("$.comments[0].parent_comment_id").doesNotExist())
+                .andExpect(jsonPath("$.comments[1].parent_comment_id").doesNotExist());
+    }
+
+    // AP-C5: 作者改己评（带正确 updated_at）→ 成功
+    @Test
+    void apC5_updateComment_author_withCorrectUpdatedAt_returns200() throws Exception {
+        String createBody = """
+            {
+                "body": "Original comment"
             }
             """;
 
         String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(rootBody))
+                        .content(createBody))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
-        String rootCommentId = mapper.readTree(result).get("id").asText();
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
 
-        String replyBody = """
+        String updateBody = """
             {
-                "body": "Reply to root comment",
-                "parent_comment_id": "%s"
+                "body": "Updated comment",
+                "updated_at": "%s"
             }
-            """.formatted(rootCommentId);
+            """.formatted(updatedAt);
 
-        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
                         .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(replyBody))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.parent_comment_id").value(rootCommentId))
-                .andExpect(jsonPath("$.body").value("Reply to root comment"));
+                        .content(updateBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Updated comment"));
     }
 
-    // AP-C4: reply-to-reply rejected
+    // AP-C6: 作者改己评（stale updated_at）→ 409 + 当前副本
     @Test
-    void createComment_replyToReply_returns400() throws Exception {
-        String rootBody = """
+    void apC6_updateComment_author_withStaleUpdatedAt_returns409() throws Exception {
+        String createBody = """
             {
-                "body": "Root comment"
+                "body": "Original comment"
             }
             """;
 
-        String rootResult = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(rootBody))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
-        String rootCommentId = mapper.readTree(rootResult).get("id").asText();
-
-        String replyBody = """
-            {
-                "body": "Reply to root",
-                "parent_comment_id": "%s"
-            }
-            """.formatted(rootCommentId);
-
-        String replyResult = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
                         .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(replyBody))
+                        .content(createBody))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
-        String replyCommentId = mapper.readTree(replyResult).get("id").asText();
+        String commentId = mapper.readTree(result).get("id").asText();
+        String originalUpdatedAt = mapper.readTree(result).get("updated_at").asText();
 
-        String replyToReplyBody = """
+        String updateBody1 = """
             {
-                "body": "Reply to reply (should fail)",
-                "parent_comment_id": "%s"
+                "body": "First update",
+                "updated_at": "%s"
             }
-            """.formatted(replyCommentId);
+            """.formatted(originalUpdatedAt);
 
-        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(replyToReplyBody))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("reply-to-reply not allowed; parent must be a root comment"));
+                        .content(updateBody1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("First update"));
+
+        String updateBody2 = """
+            {
+                "body": "Stale update attempt",
+                "updated_at": "%s"
+            }
+            """.formatted(originalUpdatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody2))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.body").value("First update"))
+                .andExpect(jsonPath("$.updated_at").isNotEmpty());
     }
 
-    // AP-C5: author can delete own comment
+    // AP-C7: 改他人评 → 拒绝
     @Test
-    void deleteComment_author_returns204() throws Exception {
+    void apC7_updateComment_nonAuthor_returns403() throws Exception {
+        String createBody = """
+            {
+                "body": "Editor's comment"
+            }
+            """;
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
+
+        String updateBody = """
+            {
+                "body": "Admin trying to edit",
+                "updated_at": "%s"
+            }
+            """.formatted(updatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("only author can edit comment"));
+    }
+
+    // AP-C8: 作者删己评 → 成功
+    @Test
+    void apC8_deleteComment_author_returns204() throws Exception {
         String createBody = """
             {
                 "body": "Comment to delete"
@@ -272,7 +344,7 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
             """;
 
         String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createBody))
                 .andExpect(status().isCreated())
@@ -281,25 +353,25 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
         String commentId = mapper.readTree(result).get("id").asText();
 
         mockMvc.perform(delete("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
-                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID)))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
-                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID)))
                 .andExpect(status().isNotFound());
     }
 
-    // AP-C6: admin can delete other's comment
+    // AP-C9: admin 删他人评 → 成功
     @Test
-    void deleteComment_admin_deleteOther_returns204() throws Exception {
+    void apC9_deleteComment_admin_deleteOther_returns204() throws Exception {
         String createBody = """
             {
-                "body": "Viewer's comment"
+                "body": "Editor's comment"
             }
             """;
 
         String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createBody))
                 .andExpect(status().isCreated())
@@ -312,32 +384,9 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
                 .andExpect(status().isNoContent());
     }
 
-    // AP-C6: editor can delete other's comment
+    // AP-C10: editor 删他人评 → 拒绝
     @Test
-    void deleteComment_editor_deleteOther_returns204() throws Exception {
-        String createBody = """
-            {
-                "body": "Viewer's comment"
-            }
-            """;
-
-        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(createBody))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
-        String commentId = mapper.readTree(result).get("id").asText();
-
-        mockMvc.perform(delete("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
-                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID)))
-                .andExpect(status().isNoContent());
-    }
-
-    // AP-C7: viewer cannot delete other's comment
-    @Test
-    void deleteComment_viewer_deleteOther_returns403() throws Exception {
+    void apC10_deleteComment_editor_deleteOther_returns403() throws Exception {
         String createBody = """
             {
                 "body": "Admin's comment"
@@ -354,14 +403,14 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
         String commentId = mapper.readTree(result).get("id").asText();
 
         mockMvc.perform(delete("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
-                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID)))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("only author or admin/editor can delete comments"));
+                .andExpect(jsonPath("$.error").value("only author or admin can delete comments"));
     }
 
-    // AP-C8: Hidden story - viewer cannot see comments
+    // AP-C11: 故事 Hidden 对 viewer 不可见 → 无评论列表/入口
     @Test
-    void listComments_hiddenStory_viewer_returns404() throws Exception {
+    void apC11_listComments_hiddenStory_viewer_returns404() throws Exception {
         String createBody = """
             {
                 "body": "Comment on hidden story"
@@ -380,7 +429,7 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
     }
 
     @Test
-    void listComments_hiddenStory_admin_returns200() throws Exception {
+    void apC11_listComments_hiddenStory_admin_returns200() throws Exception {
         String createBody = """
             {
                 "body": "Comment on hidden story"
@@ -399,9 +448,9 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.comments", hasSize(1)));
     }
 
-    // AP-C9: body > 1000 characters - rejected
+    // AP-C12: 正文 >1000 → 拒绝
     @Test
-    void createComment_bodyTooLong_returns400() throws Exception {
+    void apC12_createComment_bodyTooLong_returns400() throws Exception {
         String longBody = "x".repeat(1001);
         String body = """
             {
@@ -418,7 +467,7 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
     }
 
     @Test
-    void createComment_bodyAtMaxLength_returns201() throws Exception {
+    void apC12_createComment_bodyAtMaxLength_returns201() throws Exception {
         String maxBody = "x".repeat(1000);
         String body = """
             {
@@ -434,36 +483,7 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.body").value(maxBody));
     }
 
-    // AP-C10: no edit endpoint
-    @Test
-    void updateComment_returns405() throws Exception {
-        String createBody = """
-            {
-                "body": "Original comment"
-            }
-            """;
-
-        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(createBody))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
-        String commentId = mapper.readTree(result).get("id").asText();
-
-        String updateBody = """
-            {
-                "body": "Updated comment"
-            }
-            """;
-
-        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
-                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(updateBody))
-                .andExpect(status().isMethodNotAllowed());
-    }
+    // Additional tests
 
     // Empty body - rejected
     @Test
@@ -482,62 +502,80 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.error").value("body is required"));
     }
 
-    // Parent comment not found
+    // Missing updated_at on update - rejected
     @Test
-    void createComment_parentNotFound_returns400() throws Exception {
-        UUID unknownParentId = UUID.randomUUID();
-        String body = """
+    void updateComment_missingUpdatedAt_returns400() throws Exception {
+        String createBody = """
             {
-                "body": "Reply to unknown parent",
-                "parent_comment_id": "%s"
-            }
-            """.formatted(unknownParentId);
-
-        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("parent comment not found"));
-    }
-
-    // List comments with parent_id (flat representation)
-    @Test
-    void listComments_returnsWithParentId() throws Exception {
-        String rootBody = """
-            {
-                "body": "Root comment"
+                "body": "Original comment"
             }
             """;
 
-        String rootResult = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(rootBody))
+                        .content(createBody))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
-        String rootCommentId = mapper.readTree(rootResult).get("id").asText();
+        String commentId = mapper.readTree(result).get("id").asText();
 
-        String replyBody = """
+        String updateBody = """
             {
-                "body": "Reply comment",
-                "parent_comment_id": "%s"
+                "body": "Updated comment"
             }
-            """.formatted(rootCommentId);
+            """;
 
-        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
                         .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(replyBody))
+                        .content(updateBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("updated_at is required for updates"));
+    }
+
+    // viewer can read comments
+    @Test
+    void listComments_viewer_returns200() throws Exception {
+        String createBody = """
+            {
+                "body": "A comment"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
                         .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.comments", hasSize(2)))
-                .andExpect(jsonPath("$.comments[0].parent_comment_id").doesNotExist())
-                .andExpect(jsonPath("$.comments[1].parent_comment_id").value(rootCommentId));
+                .andExpect(jsonPath("$.comments", hasSize(1)));
+    }
+
+    // viewer cannot delete any comment
+    @Test
+    void deleteComment_viewer_returns403() throws Exception {
+        String createBody = """
+            {
+                "body": "Admin comment"
+            }
+            """;
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+
+        mockMvc.perform(delete("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isForbidden());
     }
 
     // Story not found
@@ -696,7 +734,7 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
             """;
 
         mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID))
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body3))
                 .andExpect(status().isCreated());
@@ -708,47 +746,5 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.comments[0].body").value("First comment"))
                 .andExpect(jsonPath("$.comments[1].body").value("Second comment"))
                 .andExpect(jsonPath("$.comments[2].body").value("Third comment"));
-    }
-
-    // Delete parent comment cascades to replies
-    @Test
-    void deleteComment_parentCascadesToReplies() throws Exception {
-        String rootBody = """
-            {
-                "body": "Root comment"
-            }
-            """;
-
-        String rootResult = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(rootBody))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
-        String rootCommentId = mapper.readTree(rootResult).get("id").asText();
-
-        String replyBody = """
-            {
-                "body": "Reply comment",
-                "parent_comment_id": "%s"
-            }
-            """.formatted(rootCommentId);
-
-        String replyResult = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
-                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(replyBody))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
-        String replyCommentId = mapper.readTree(replyResult).get("id").asText();
-
-        mockMvc.perform(delete("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + rootCommentId)
-                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID)))
-                .andExpect(status().isNoContent());
-
-        StoryCommentMapper.CommentRow deletedReply = commentMapper.findById(UUID.fromString(replyCommentId));
-        assert deletedReply == null : "Reply should be cascade deleted with parent";
     }
 }
