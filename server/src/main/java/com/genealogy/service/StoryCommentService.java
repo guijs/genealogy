@@ -7,7 +7,6 @@ import com.genealogy.store.StoryCommentStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,22 +41,9 @@ public class StoryCommentService {
         }
     }
 
-    public static class VersionConflictException extends RuntimeException {
-        private final StoryComment currentComment;
-
-        public VersionConflictException(StoryComment currentComment) {
-            super("version conflict");
-            this.currentComment = currentComment;
-        }
-
-        public StoryComment getCurrentComment() {
-            return currentComment;
-        }
-    }
-
-    public static class NotAuthorException extends RuntimeException {
-        public NotAuthorException() {
-            super("only author can perform this action");
+    public static class InvalidParentException extends RuntimeException {
+        public InvalidParentException(String message) {
+            super(message);
         }
     }
 
@@ -69,61 +55,29 @@ public class StoryCommentService {
 
     @Transactional
     public StoryComment createComment(UUID familyId, UUID storyId, UUID authorUserId,
-                                      String body, Role userRole) {
-        if (!userRole.canWrite()) {
-            throw new PermissionDeniedException("only admin or editor can create comments");
-        }
-
+                                      String body, UUID parentCommentId, Role userRole) {
         Optional<Story> storyOpt = storyService.getStory(familyId, storyId, userRole);
         if (storyOpt.isEmpty()) {
             throw new StoryNotFoundException();
         }
 
         validateBody(body);
+
+        if (parentCommentId != null) {
+            validateParentComment(storyId, parentCommentId);
+        }
 
         UUID commentId = UUID.randomUUID();
         StoryComment comment = new StoryComment(
                 commentId,
                 storyId,
+                parentCommentId,
                 authorUserId,
                 body,
-                null,
                 null
         );
 
         commentStore.createComment(comment);
-        return commentStore.getComment(commentId).orElseThrow(CommentNotFoundException::new);
-    }
-
-    @Transactional
-    public StoryComment updateComment(UUID familyId, UUID storyId, UUID commentId,
-                                      UUID requestingUserId, String body, Instant expectedUpdatedAt,
-                                      Role userRole) {
-        Optional<Story> storyOpt = storyService.getStory(familyId, storyId, userRole);
-        if (storyOpt.isEmpty()) {
-            throw new StoryNotFoundException();
-        }
-
-        Optional<StoryComment> existingOpt = commentStore.getCommentByIdAndStoryId(commentId, storyId);
-        if (existingOpt.isEmpty()) {
-            throw new CommentNotFoundException();
-        }
-
-        StoryComment existing = existingOpt.get();
-
-        if (!existing.getAuthorUserId().equals(requestingUserId)) {
-            throw new NotAuthorException();
-        }
-
-        validateBody(body);
-
-        StoryCommentStore.WriteResult result = commentStore.updateComment(commentId, body, expectedUpdatedAt);
-        if (result instanceof StoryCommentStore.WriteResult.NotFound) {
-            throw new CommentNotFoundException();
-        } else if (result instanceof StoryCommentStore.WriteResult.VersionConflict conflict) {
-            throw new VersionConflictException(conflict.currentComment());
-        }
-
         return commentStore.getComment(commentId).orElseThrow(CommentNotFoundException::new);
     }
 
@@ -142,10 +96,10 @@ public class StoryCommentService {
 
         StoryComment existing = existingOpt.get();
         boolean isAuthor = existing.getAuthorUserId().equals(requestingUserId);
-        boolean isAdmin = userRole == Role.ADMIN;
+        boolean canWriteOthers = userRole.canWrite();
 
-        if (!isAuthor && !isAdmin) {
-            throw new PermissionDeniedException("only author or admin can delete comments");
+        if (!isAuthor && !canWriteOthers) {
+            throw new PermissionDeniedException("only author or admin/editor can delete comments");
         }
 
         StoryCommentStore.WriteResult result = commentStore.deleteComment(commentId);
@@ -180,6 +134,18 @@ public class StoryCommentService {
         }
         if (body.length() > MAX_BODY_LENGTH) {
             throw new InvalidBodyException("body exceeds maximum length of " + MAX_BODY_LENGTH + " characters");
+        }
+    }
+
+    private void validateParentComment(UUID storyId, UUID parentCommentId) {
+        Optional<StoryComment> parentOpt = commentStore.getCommentByIdAndStoryId(parentCommentId, storyId);
+        if (parentOpt.isEmpty()) {
+            throw new InvalidParentException("parent comment not found");
+        }
+
+        StoryComment parent = parentOpt.get();
+        if (!parent.isRootComment()) {
+            throw new InvalidParentException("reply-to-reply not allowed; parent must be a root comment");
         }
     }
 }

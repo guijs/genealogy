@@ -7,14 +7,11 @@ import com.genealogy.web.dto.CommentResponse;
 import com.genealogy.web.dto.CommentsListResponse;
 import com.genealogy.web.dto.CreateCommentRequest;
 import com.genealogy.web.dto.ErrorResponse;
-import com.genealogy.web.dto.UpdateCommentRequest;
 import com.genealogy.web.filter.FamilyMembershipFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -109,12 +106,22 @@ public class StoryCommentController {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         }
 
+        UUID parentCommentId = null;
+        if (body.getParentCommentId() != null && !body.getParentCommentId().isBlank()) {
+            try {
+                parentCommentId = UUID.fromString(body.getParentCommentId());
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(new ErrorResponse("invalid parent_comment_id"));
+            }
+        }
+
         try {
             StoryComment comment = commentService.createComment(
                     familyId,
                     storyUUID,
                     membership.getUserId(),
                     body.getBody(),
+                    parentCommentId,
                     membership.getRole()
             );
             return ResponseEntity.status(201).body(CommentResponse.fromComment(comment));
@@ -122,67 +129,8 @@ public class StoryCommentController {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         } catch (StoryCommentService.InvalidBodyException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
-        } catch (StoryCommentService.PermissionDeniedException e) {
-            return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
-        }
-    }
-
-    @PutMapping("/{commentId}")
-    public ResponseEntity<?> updateComment(HttpServletRequest request,
-                                           @PathVariable String storyId,
-                                           @PathVariable String commentId,
-                                           @RequestBody UpdateCommentRequest body) {
-        UUID familyId = (UUID) request.getAttribute(FamilyMembershipFilter.FAMILY_ID_ATTRIBUTE);
-        if (familyId == null) {
-            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
-        }
-
-        Membership membership = (Membership) request.getAttribute(FamilyMembershipFilter.MEMBERSHIP_ATTRIBUTE);
-        if (membership == null) {
-            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
-        }
-
-        UUID storyUUID;
-        UUID commentUUID;
-        try {
-            storyUUID = UUID.fromString(storyId);
-            commentUUID = UUID.fromString(commentId);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
-        }
-
-        if (body.getUpdatedAt() == null) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("updated_at is required for updates"));
-        }
-
-        Instant expectedUpdatedAt;
-        try {
-            expectedUpdatedAt = Instant.parse(body.getUpdatedAt());
-        } catch (DateTimeParseException e) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("invalid updated_at format, expected ISO-8601"));
-        }
-
-        try {
-            StoryComment comment = commentService.updateComment(
-                    familyId,
-                    storyUUID,
-                    commentUUID,
-                    membership.getUserId(),
-                    body.getBody(),
-                    expectedUpdatedAt,
-                    membership.getRole()
-            );
-            return ResponseEntity.ok(CommentResponse.fromComment(comment));
-        } catch (StoryCommentService.StoryNotFoundException e) {
-            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
-        } catch (StoryCommentService.CommentNotFoundException e) {
-            return ResponseEntity.status(404).body(new ErrorResponse("not found"));
-        } catch (StoryCommentService.InvalidBodyException e) {
+        } catch (StoryCommentService.InvalidParentException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
-        } catch (StoryCommentService.NotAuthorException e) {
-            return ResponseEntity.status(403).body(new ErrorResponse("only author can edit comment"));
-        } catch (StoryCommentService.VersionConflictException e) {
-            return ResponseEntity.status(409).body(CommentResponse.fromComment(e.getCurrentComment()));
         }
     }
 

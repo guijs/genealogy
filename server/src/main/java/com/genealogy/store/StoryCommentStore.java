@@ -4,7 +4,6 @@ import com.genealogy.domain.story.StoryComment;
 import com.genealogy.mapper.StoryCommentMapper;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -21,13 +20,13 @@ public class StoryCommentStore {
     public sealed interface WriteResult {
         record Success() implements WriteResult {}
         record NotFound() implements WriteResult {}
-        record VersionConflict(StoryComment currentComment) implements WriteResult {}
     }
 
     public void createComment(StoryComment comment) {
         commentMapper.insertComment(
                 comment.getId(),
                 comment.getStoryId(),
+                comment.getParentCommentId(),
                 comment.getAuthorUserId(),
                 comment.getBody()
         );
@@ -58,20 +57,6 @@ public class StoryCommentStore {
         return comments;
     }
 
-    public WriteResult updateComment(UUID id, String body, Instant expectedUpdatedAt) {
-        int rowsAffected = commentMapper.updateComment(id, body, expectedUpdatedAt);
-
-        if (rowsAffected == 0) {
-            Optional<StoryComment> current = getComment(id);
-            if (current.isEmpty()) {
-                return new WriteResult.NotFound();
-            }
-            return new WriteResult.VersionConflict(current.get());
-        }
-
-        return new WriteResult.Success();
-    }
-
     public WriteResult deleteComment(UUID id) {
         int rowsAffected = commentMapper.deleteById(id);
 
@@ -89,10 +74,10 @@ public class StoryCommentStore {
         return new StoryComment(
                 row.id(),
                 row.storyId(),
+                row.parentCommentId(),
                 row.authorUserId(),
                 row.body(),
-                row.createdAt(),
-                row.updatedAt()
+                row.createdAt()
         );
     }
 }

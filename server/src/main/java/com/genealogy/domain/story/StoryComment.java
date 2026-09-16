@@ -6,19 +6,19 @@ import java.util.UUID;
 public class StoryComment {
     private final UUID id;
     private final UUID storyId;
+    private final UUID parentCommentId;
     private final UUID authorUserId;
     private final String body;
     private final Instant createdAt;
-    private final Instant updatedAt;
 
-    public StoryComment(UUID id, UUID storyId, UUID authorUserId, String body,
-                        Instant createdAt, Instant updatedAt) {
+    public StoryComment(UUID id, UUID storyId, UUID parentCommentId, UUID authorUserId,
+                        String body, Instant createdAt) {
         this.id = id;
         this.storyId = storyId;
+        this.parentCommentId = parentCommentId;
         this.authorUserId = authorUserId;
         this.body = body;
         this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
     }
 
     public UUID getId() {
@@ -27,6 +27,10 @@ public class StoryComment {
 
     public UUID getStoryId() {
         return storyId;
+    }
+
+    public UUID getParentCommentId() {
+        return parentCommentId;
     }
 
     public UUID getAuthorUserId() {
@@ -41,7 +45,7 @@ public class StoryComment {
         return createdAt;
     }
 
-    public Instant getUpdatedAt() {
-        return updatedAt;
+    public boolean isRootComment() {
+        return parentCommentId == null;
     }
 }
