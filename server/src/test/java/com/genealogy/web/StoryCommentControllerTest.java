@@ -747,4 +747,91 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.comments[1].body").value("Second comment"))
                 .andExpect(jsonPath("$.comments[2].body").value("Third comment"));
     }
+
+    // MAJOR-1 regression: viewer read-only even for own comments
+    // Scenario: user creates comment as editor, then accesses as viewer (demoted/different token)
+    // Expected: PUT own → 403, DELETE own → 403
+    @Test
+    void regression_viewerCannotEditOwnComment_returns403() throws Exception {
+        // Create a new user who will be both editor and viewer in different contexts
+        UUID dualRoleUserId = UUID.fromString("99999999-9999-9999-9999-999999999999");
+        
+        // Add as editor first
+        familyStore.addMemberWithRole(FAMILY_ID, dualRoleUserId, Role.EDITOR);
+
+        // Create comment as editor
+        String createBody = """
+            {
+                "body": "Comment created as editor"
+            }
+            """;
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(dualRoleUserId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
+
+        // Demote to viewer
+        familyStore.updateMemberRole(FAMILY_ID, dualRoleUserId, Role.VIEWER);
+
+        // Attempt to edit own comment as viewer → 403
+        String updateBody = """
+            {
+                "body": "Trying to edit as viewer",
+                "updated_at": "%s"
+            }
+            """.formatted(updatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(dualRoleUserId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("write access required"));
+    }
+
+    @Test
+    void regression_viewerCannotDeleteOwnComment_returns403() throws Exception {
+        // Create a new user who will be both editor and viewer in different contexts
+        UUID dualRoleUserId = UUID.fromString("99999999-9999-9999-9999-999999999998");
+        
+        // Add as editor first
+        familyStore.addMemberWithRole(FAMILY_ID, dualRoleUserId, Role.EDITOR);
+
+        // Create comment as editor
+        String createBody = """
+            {
+                "body": "Comment created as editor for delete test"
+            }
+            """;
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(dualRoleUserId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+
+        // Demote to viewer
+        familyStore.updateMemberRole(FAMILY_ID, dualRoleUserId, Role.VIEWER);
+
+        // Attempt to delete own comment as viewer → 403
+        mockMvc.perform(delete("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(dualRoleUserId)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("write access required"));
+
+        // Verify comment still exists
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Comment created as editor for delete test"));
+    }
 }
