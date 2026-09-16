@@ -41,6 +41,7 @@ const deleting = ref(false)
 
 const newMentions = ref<MentionRequest[]>([])
 const editMentions = ref<MentionRequest[]>([])
+const editMentionsOriginal = ref<MentionRequest[]>([])
 
 const clickedMentionKey = ref<string | null>(null)
 
@@ -297,12 +298,14 @@ function startEdit(comment: CommentResponse) {
   editingCommentId.value = comment.id
   editBody.value = comment.body
   editUpdatedAt.value = comment.updated_at
-  editMentions.value = comment.mentions
+  const activeMentions = comment.mentions
     ?.filter((m): m is MentionResponse & { user_id: string } => m.user_id !== null && m.status === 'active')
     .map((m) => ({
       user_id: m.user_id,
       display_name_snapshot: m.display_name_snapshot,
     })) ?? []
+  editMentions.value = [...activeMentions]
+  editMentionsOriginal.value = [...activeMentions]
 }
 
 function cancelEdit() {
@@ -310,7 +313,21 @@ function cancelEdit() {
   editBody.value = ''
   editUpdatedAt.value = ''
   editMentions.value = []
+  editMentionsOriginal.value = []
   showMentionDropdown.value = false
+}
+
+function haveMentionsChanged(): boolean {
+  const current = editMentions.value
+  const original = editMentionsOriginal.value
+  if (current.length !== original.length) return true
+  const currentIds = new Set(current.map((m) => m.user_id))
+  const originalIds = new Set(original.map((m) => m.user_id))
+  if (currentIds.size !== originalIds.size) return true
+  for (const id of currentIds) {
+    if (!originalIds.has(id)) return true
+  }
+  return false
 }
 
 async function handleUpdate() {
@@ -319,15 +336,19 @@ async function handleUpdate() {
   submitting.value = true
 
   try {
+    const mentionsChanged = haveMentionsChanged()
+    const updatePayload: { body: string; updated_at: string; mentions?: MentionRequest[] } = {
+      body: editBody.value.trim(),
+      updated_at: editUpdatedAt.value,
+    }
+    if (mentionsChanged) {
+      updatePayload.mentions = editMentions.value
+    }
     const updatedComment = await updateComment(
       props.familyId,
       props.storyId,
       editingCommentId.value,
-      {
-        body: editBody.value.trim(),
-        updated_at: editUpdatedAt.value,
-        mentions: editMentions.value.length > 0 ? editMentions.value : undefined,
-      },
+      updatePayload,
     )
     comments.value = comments.value.map((c) =>
       c.id === updatedComment.id ? updatedComment : c,
@@ -341,12 +362,14 @@ async function handleUpdate() {
         )
         editBody.value = err.conflictComment.body
         editUpdatedAt.value = err.conflictComment.updated_at
-        editMentions.value = err.conflictComment.mentions
+        const conflictActiveMentions = err.conflictComment.mentions
           ?.filter((m): m is MentionResponse & { user_id: string } => m.user_id !== null && m.status === 'active')
           .map((m) => ({
             user_id: m.user_id,
             display_name_snapshot: m.display_name_snapshot,
           })) ?? []
+        editMentions.value = [...conflictActiveMentions]
+        editMentionsOriginal.value = [...conflictActiveMentions]
         emit('error', '评论已被更新，已加载最新内容')
       } else {
         emit('error', err.message)
