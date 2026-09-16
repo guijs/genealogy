@@ -175,7 +175,7 @@ class LocalObjectStorePathTraversalTest {
     }
 
     @Test
-    void storeFile_escapeViaSymlinkParent_stillBlocked() {
+    void storeFile_withDeepParentTraversal_throwsPathTraversalException() {
         String maliciousKey = "families/abc/../../../../../tmp/evil.txt";
         byte[] content = "malicious content".getBytes();
 

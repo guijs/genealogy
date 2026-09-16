@@ -63,6 +63,12 @@ public class StoryService {
         }
     }
 
+    public static class WriteAccessDeniedException extends RuntimeException {
+        public WriteAccessDeniedException() {
+            super("write access required");
+        }
+    }
+
     @Transactional
     public Story createStory(UUID familyId, UUID creatorId, String title, String body,
                              LocalDate narrativeTime, List<UUID> personIds) {
@@ -89,9 +95,13 @@ public class StoryService {
     }
 
     @Transactional
-    public Story updateStory(UUID familyId, UUID storyId, UUID updaterId,
+    public Story updateStory(UUID familyId, UUID storyId, UUID updaterId, Role role,
                              String title, String body, LocalDate narrativeTime,
                              List<UUID> personIds, int expectedVersion) {
+        if (role == null || !role.canWrite()) {
+            throw new WriteAccessDeniedException();
+        }
+
         Optional<Story> existingOpt = storyStore.getStoryByIdAndFamilyId(storyId, familyId);
         if (existingOpt.isEmpty()) {
             throw new StoryNotFoundException();
@@ -131,7 +141,11 @@ public class StoryService {
     }
 
     @Transactional
-    public void deleteStory(UUID familyId, UUID storyId, int expectedVersion) {
+    public void deleteStory(UUID familyId, UUID storyId, Role role, int expectedVersion) {
+        if (role == null || !role.canWrite()) {
+            throw new WriteAccessDeniedException();
+        }
+
         Optional<Story> existingOpt = storyStore.getStoryByIdAndFamilyId(storyId, familyId);
         if (existingOpt.isEmpty()) {
             throw new StoryNotFoundException();

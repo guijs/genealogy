@@ -178,6 +178,7 @@ public class StoryController {
                     familyId,
                     storyUUID,
                     membership.getUserId(),
+                    membership.getRole(),
                     body.getTitle(),
                     body.getBody(),
                     narrativeTime,
@@ -185,6 +186,8 @@ public class StoryController {
                     body.getVersion()
             );
             return ResponseEntity.ok(StoryResponse.fromStory(story));
+        } catch (StoryService.WriteAccessDeniedException e) {
+            return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
         } catch (StoryService.StoryNotFoundException e) {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         } catch (StoryService.VersionConflictException e) {
@@ -222,8 +225,10 @@ public class StoryController {
         }
 
         try {
-            storyService.deleteStory(familyId, storyUUID, body.getVersion());
+            storyService.deleteStory(familyId, storyUUID, membership.getRole(), body.getVersion());
             return ResponseEntity.noContent().build();
+        } catch (StoryService.WriteAccessDeniedException e) {
+            return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
         } catch (StoryService.StoryNotFoundException e) {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         } catch (StoryService.VersionConflictException e) {

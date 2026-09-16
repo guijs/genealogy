@@ -179,6 +179,8 @@ public class StoryCommentController {
             return ResponseEntity.status(404).body(new ErrorResponse("not found"));
         } catch (StoryCommentService.InvalidBodyException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (StoryCommentService.PermissionDeniedException e) {
+            return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.NotAuthorException e) {
             return ResponseEntity.status(403).body(new ErrorResponse("only author can edit comment"));
         } catch (StoryCommentService.VersionConflictException e) {
