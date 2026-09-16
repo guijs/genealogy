@@ -51,6 +51,7 @@ const editingGenerationNames = ref<string[]>([])
 const editingGenerationNameAlign = ref<GenerationNameAlign>('A')
 const generationNamesSubmitting = ref(false)
 const generationNamesError = ref<string | null>(null)
+const generationNamesConfigLoaded = ref(false)
 
 const availablePersons = computed(() => {
   return persons.value.filter((p) => p.id !== lineage.value?.progenitor_person_id)
@@ -213,23 +214,28 @@ function getAlignLabel(align: GenerationNameAlign): string {
 async function openGenerationNamesEditor() {
   generationNamesError.value = null
   generationNamesSubmitting.value = false
+  generationNamesConfigLoaded.value = false
 
   try {
     const config = await fetchGenerationNames({ familyId: currentFamilyId.value! })
     editingGenerationNames.value = config.generation_names ? [...config.generation_names] : []
     editingGenerationNameAlign.value = config.generation_name_align || 'A'
+    generationNamesConfigLoaded.value = true
+    generationNamesEditorOpen.value = true
   } catch (e) {
-    editingGenerationNames.value = []
-    editingGenerationNameAlign.value = lineage.value?.generation_name_align || 'A'
+    if (e instanceof GenerationNamesApiError) {
+      actionError.value = e.message
+    } else {
+      actionError.value = '加载字辈配置失败'
+    }
   }
-
-  generationNamesEditorOpen.value = true
 }
 
 function closeGenerationNamesEditor() {
   generationNamesEditorOpen.value = false
   editingGenerationNames.value = []
   generationNamesError.value = null
+  generationNamesConfigLoaded.value = false
 }
 
 function addGenerationNameEntry() {
@@ -657,7 +663,7 @@ defineExpose({ reload: loadLineage })
           <button
             type="button"
             class="btn-submit"
-            :disabled="generationNamesSubmitting"
+            :disabled="generationNamesSubmitting || !generationNamesConfigLoaded"
             @click="handleSaveGenerationNames"
           >
             {{ generationNamesSubmitting ? '保存中…' : '保存' }}

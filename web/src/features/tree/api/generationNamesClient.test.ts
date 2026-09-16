@@ -399,6 +399,102 @@ describe('generationNamesClient', () => {
   })
 
   /**
+   * MAJOR-1 regression: GET failure must throw so UI can prevent modal open.
+   * If GET fails, UI should NOT open editor modal with empty writable state,
+   * as that could allow user to PUT [] and wipe existing 字辈.
+   */
+  describe('MAJOR-1: GET failure must propagate error to prevent accidental wipe', () => {
+    const originalEnv = { ...import.meta.env }
+
+    beforeEach(() => {
+      vi.stubGlobal('fetch', vi.fn())
+      vi.stubGlobal('localStorage', mockLocalStorage)
+      mockLocalStorage.clear()
+    })
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+      Object.assign(import.meta.env, originalEnv)
+    })
+
+    it('fetchGenerationNames throws on network/server error - UI must catch and NOT open editor', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ error: 'internal server error' }),
+      } as Response)
+
+      let fetchError: GenerationNamesApiError | null = null
+      try {
+        await fetchGenerationNames({ familyId: 'family-1' })
+      } catch (e) {
+        fetchError = e as GenerationNamesApiError
+      }
+
+      expect(fetchError).not.toBeNull()
+      expect(fetchError!.status).toBe(500)
+    })
+
+    it('fetchGenerationNames 401 throws - UI must catch and show login error', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'authentication required' }),
+      } as Response)
+
+      await expect(fetchGenerationNames({ familyId: 'family-1' }))
+        .rejects.toThrow('请先登录')
+    })
+
+    it('legitimate null generation_names returns successfully (not an error)', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      const mockResponse = {
+        generation_names: null,
+        generation_name_align: 'A',
+      }
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      } as Response)
+
+      const result = await fetchGenerationNames({ familyId: 'family-1' })
+      expect(result.generation_names).toBeNull()
+      expect(result.generation_name_align).toBe('A')
+    })
+
+    it('legitimate empty array returns successfully (not an error)', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      const mockResponse = {
+        generation_names: [],
+        generation_name_align: 'A',
+      }
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      } as Response)
+
+      const result = await fetchGenerationNames({ familyId: 'family-1' })
+      expect(result.generation_names).toEqual([])
+    })
+  })
+
+  /**
    * Error isolation: updateGenerationNames errors should NOT affect lineage data.
    * UI uses separate actionError for write failures, loadError for load failures.
    */
