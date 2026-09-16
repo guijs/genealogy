@@ -63,6 +63,7 @@ const formPersonRefsOriginal = ref<PersonRefRequest[]>([])
 const showPersonRefDropdown = ref(false)
 const personRefFilterText = ref('')
 const personRefDropdownPosition = ref({ top: 0, left: 0 })
+const personRefTriggerMode = ref<'hash' | 'picker'>('hash')
 const formBodyTextareaRef = ref<HTMLTextAreaElement | null>(null)
 
 const deleteConfirmOpen = ref(false)
@@ -456,6 +457,7 @@ function handleBodyInput(event: Event) {
 
   if (hashMatch) {
     personRefFilterText.value = hashMatch[1]
+    personRefTriggerMode.value = 'hash'
     showPersonRefDropdown.value = true
 
     const rect = textarea.getBoundingClientRect()
@@ -481,7 +483,11 @@ function handleBodyKeydown(event: KeyboardEvent) {
     } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
     } else if (event.key === 'Enter' && filteredPersonRefCandidates.value.length > 0) {
-      selectPersonRef(filteredPersonRefCandidates.value[0])
+      if (personRefTriggerMode.value === 'picker') {
+        addPersonRefFromPicker(filteredPersonRefCandidates.value[0])
+      } else {
+        selectPersonRef(filteredPersonRefCandidates.value[0])
+      }
       event.preventDefault()
     }
   }
@@ -520,6 +526,7 @@ function selectPersonRef(candidate: PersonRefCandidate) {
 }
 
 function openPersonRefPicker() {
+  personRefTriggerMode.value = 'picker'
   showPersonRefDropdown.value = true
   personRefFilterText.value = ''
   
@@ -958,7 +965,7 @@ function handleCommentError(message: string) {
             :key="candidate.person_id"
             class="person-ref-dropdown-item"
             :class="{ 'candidate-deceased': candidate.deceased }"
-            @click="addPersonRefFromPicker(candidate)"
+            @click="personRefTriggerMode === 'picker' ? addPersonRefFromPicker(candidate) : selectPersonRef(candidate)"
           >
             {{ candidate.display_name }}
             <span v-if="candidate.deceased" class="deceased-badge">已故</span>

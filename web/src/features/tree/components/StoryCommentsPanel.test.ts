@@ -743,6 +743,139 @@ describe('StoryCommentsPanel', () => {
     })
   })
 
+  describe('toolbar insert person (picker mode) regression', () => {
+    it('inserts person ref at cursor when body has no # (picker mode)', async () => {
+      vi.mocked(listComments).mockResolvedValue({ comments: [] })
+      vi.mocked(fetchPersonRefCandidates).mockResolvedValue({
+        candidates: [
+          { person_id: 'person-1', display_name: '张三', deceased: false },
+          { person_id: 'person-2', display_name: '李四', deceased: false },
+        ],
+      })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-editor',
+          members: [mockMember({ user_id: 'user-editor', role: 'editor' })],
+          isAdmin: false,
+          canWrite: true,
+        },
+      })
+
+      await flushPromises()
+
+      const textarea = wrapper.find('.compose-section textarea')
+      await textarea.setValue('Hello World')
+
+      const textareaEl = textarea.element as HTMLTextAreaElement
+      textareaEl.selectionStart = 6
+      textareaEl.selectionEnd = 6
+
+      const insertButton = wrapper.find('.btn-insert-person-sm')
+      await insertButton.trigger('click')
+      await flushPromises()
+
+      const dropdown = wrapper.find('.person-ref-dropdown')
+      expect(dropdown.exists()).toBe(true)
+
+      const items = wrapper.findAll('.person-ref-dropdown-item')
+      expect(items.length).toBeGreaterThan(0)
+      await items[0].trigger('click')
+      await flushPromises()
+
+      const vm = wrapper.vm as unknown as { newCommentBody: string; newPersonRefs: { person_id: string }[] }
+      expect(vm.newCommentBody).toContain('#张三')
+      expect(vm.newPersonRefs.some((r) => r.person_id === 'person-1')).toBe(true)
+    })
+
+    it('does not modify existing # fragment when inserting via toolbar picker', async () => {
+      vi.mocked(listComments).mockResolvedValue({ comments: [] })
+      vi.mocked(fetchPersonRefCandidates).mockResolvedValue({
+        candidates: [
+          { person_id: 'person-1', display_name: '张三', deceased: false },
+          { person_id: 'person-2', display_name: '李四', deceased: false },
+        ],
+      })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-editor',
+          members: [mockMember({ user_id: 'user-editor', role: 'editor' })],
+          isAdmin: false,
+          canWrite: true,
+        },
+      })
+
+      await flushPromises()
+
+      const originalBody = 'Hello #王五 World'
+      const textarea = wrapper.find('.compose-section textarea')
+      await textarea.setValue(originalBody)
+
+      const textareaEl = textarea.element as HTMLTextAreaElement
+      textareaEl.selectionStart = originalBody.length
+      textareaEl.selectionEnd = originalBody.length
+
+      const insertButton = wrapper.find('.btn-insert-person-sm')
+      await insertButton.trigger('click')
+      await flushPromises()
+
+      const items = wrapper.findAll('.person-ref-dropdown-item')
+      await items[0].trigger('click')
+      await flushPromises()
+
+      const vm = wrapper.vm as unknown as { newCommentBody: string }
+      expect(vm.newCommentBody).toContain('#王五')
+      expect(vm.newCommentBody).toContain('#张三')
+      expect(vm.newCommentBody.indexOf('#王五')).toBeLessThan(vm.newCommentBody.indexOf('#张三'))
+    })
+
+    it('Enter key inserts at cursor in picker mode, not at lastIndexOf #', async () => {
+      vi.mocked(listComments).mockResolvedValue({ comments: [] })
+      vi.mocked(fetchPersonRefCandidates).mockResolvedValue({
+        candidates: [
+          { person_id: 'person-1', display_name: '张三', deceased: false },
+        ],
+      })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-editor',
+          members: [mockMember({ user_id: 'user-editor', role: 'editor' })],
+          isAdmin: false,
+          canWrite: true,
+        },
+      })
+
+      await flushPromises()
+
+      const originalBody = 'Start #existing End'
+      const textarea = wrapper.find('.compose-section textarea')
+      await textarea.setValue(originalBody)
+
+      const textareaEl = textarea.element as HTMLTextAreaElement
+      textareaEl.selectionStart = originalBody.length
+      textareaEl.selectionEnd = originalBody.length
+
+      const insertButton = wrapper.find('.btn-insert-person-sm')
+      await insertButton.trigger('click')
+      await flushPromises()
+
+      await textarea.trigger('keydown', { key: 'Enter' })
+      await flushPromises()
+
+      const vm = wrapper.vm as unknown as { newCommentBody: string }
+      expect(vm.newCommentBody).toBe('Start #existing End#张三 ')
+      expect(vm.newCommentBody).toContain('#existing')
+    })
+  })
+
   describe('# trigger does not open @ dropdown', () => {
     it('typing # does not show mention dropdown', async () => {
       vi.mocked(listComments).mockResolvedValue({ comments: [] })
