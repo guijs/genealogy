@@ -5,6 +5,7 @@ import com.genealogy.domain.person.Person;
 import com.genealogy.domain.projection.Gender;
 import com.genealogy.domain.projection.ProjectionPerson;
 import com.genealogy.mapper.PersonMapper;
+import com.genealogy.mapper.StoryMapper;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
@@ -40,6 +41,9 @@ class StoryControllerTest extends BaseIntegrationTest {
 
     @Autowired
     private PersonMapper personMapper;
+
+    @Autowired
+    private StoryMapper storyMapper;
 
     private static final UUID FAMILY_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID ADMIN_USER_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
@@ -862,5 +866,106 @@ class StoryControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.id").value(storyId))
                 .andExpect(jsonPath("$.person_ids", hasSize(1)))
                 .andExpect(jsonPath("$.person_ids[0]").value(PERSON_ID_1.toString()));
+    }
+
+    @Test
+    void updateStory_atomicVersionConflict_sqlGatesOnVersion() throws Exception {
+        String createBody = """
+            {
+                "title": "Original Title",
+                "body": "Original body content"
+            }
+            """;
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.version").value(1))
+                .andReturn().getResponse().getContentAsString();
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        String storyId = mapper.readTree(result).get("id").asText();
+        UUID storyUuid = UUID.fromString(storyId);
+
+        int rowsAffected = storyMapper.updateStory(
+                storyUuid,
+                "Concurrent Update Title",
+                "Concurrent update body - this simulates another process updating",
+                null,
+                ADMIN_USER_ID,
+                1
+        );
+        assert rowsAffected == 1 : "Concurrent update should succeed";
+
+        String updateBody = """
+            {
+                "title": "Stale Update Attempt",
+                "body": "This update uses stale version 1",
+                "version": 1
+            }
+            """;
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId)
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.title").value("Concurrent Update Title"))
+                .andExpect(jsonPath("$.body").value("Concurrent update body - this simulates another process updating"));
+    }
+
+    @Test
+    void deleteStory_atomicVersionConflict_sqlGatesOnVersion() throws Exception {
+        String createBody = """
+            {
+                "title": "Story to Delete",
+                "body": "Original body"
+            }
+            """;
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.version").value(1))
+                .andReturn().getResponse().getContentAsString();
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        String storyId = mapper.readTree(result).get("id").asText();
+        UUID storyUuid = UUID.fromString(storyId);
+
+        int rowsAffected = storyMapper.updateStory(
+                storyUuid,
+                "Updated Before Delete Attempt",
+                "Body updated by concurrent process",
+                null,
+                ADMIN_USER_ID,
+                1
+        );
+        assert rowsAffected == 1 : "Concurrent update should succeed";
+
+        String deleteBody = """
+            {
+                "version": 1
+            }
+            """;
+
+        mockMvc.perform(delete("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId)
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.title").value("Updated Before Delete Attempt"))
+                .andExpect(jsonPath("$.body").value("Body updated by concurrent process"));
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId)
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2));
     }
 }

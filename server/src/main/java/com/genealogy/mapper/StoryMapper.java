@@ -24,12 +24,12 @@ public interface StoryMapper {
 
     void deleteStoryPersons(@Param("storyId") UUID storyId);
 
-    void updateStory(@Param("id") UUID id,
-                     @Param("title") String title,
-                     @Param("body") String body,
-                     @Param("narrativeTime") LocalDate narrativeTime,
-                     @Param("updatedBy") UUID updatedBy,
-                     @Param("version") int newVersion);
+    int updateStory(@Param("id") UUID id,
+                    @Param("title") String title,
+                    @Param("body") String body,
+                    @Param("narrativeTime") LocalDate narrativeTime,
+                    @Param("updatedBy") UUID updatedBy,
+                    @Param("expectedVersion") int expectedVersion);
 
     StoryRow findById(@Param("id") UUID id);
 
@@ -41,7 +41,7 @@ public interface StoryMapper {
 
     List<UUID> findPersonIdsByStoryId(@Param("storyId") UUID storyId);
 
-    void deleteById(@Param("id") UUID id);
+    int deleteById(@Param("id") UUID id, @Param("expectedVersion") int expectedVersion);
 
     void deleteAll();
 

@@ -38,8 +38,8 @@
             narrative_time = #{narrativeTime},
             updated_by = #{updatedBy},
             updated_at = CURRENT_TIMESTAMP,
-            version = #{version}
-        WHERE id = #{id}
+            version = #{expectedVersion} + 1
+        WHERE id = #{id} AND version = #{expectedVersion}
     </update>
 
     <select id="findById" resultMap="storyRowResultMap">
@@ -71,7 +71,7 @@
     </select>
 
     <delete id="deleteById">
-        DELETE FROM stories WHERE id = #{id}
+        DELETE FROM stories WHERE id = #{id} AND version = #{expectedVersion}
     </delete>
 
     <delete id="deleteAll">
