@@ -448,7 +448,7 @@ describe('putUploadFile', () => {
       ok: false,
       status: 400,
       statusText: 'Bad Request',
-      json: () => Promise.resolve({ error: 'Content-Type mismatch: expected image/png' }),
+      text: () => Promise.resolve(JSON.stringify({ error: 'Content-Type mismatch: expected image/png' })),
     })
     vi.stubGlobal('fetch', mockFetch)
 
@@ -472,7 +472,7 @@ describe('putUploadFile', () => {
       ok: false,
       status: 400,
       statusText: 'Bad Request',
-      json: () => Promise.resolve({ error: 'file is empty' }),
+      text: () => Promise.resolve(JSON.stringify({ error: 'file is empty' })),
     })
     vi.stubGlobal('fetch', mockFetch)
 
@@ -496,7 +496,6 @@ describe('putUploadFile', () => {
       ok: false,
       status: 400,
       statusText: 'Bad Request',
-      json: () => Promise.reject(new Error('not JSON')),
       text: () => Promise.reject(new Error('no body')),
     })
     vi.stubGlobal('fetch', mockFetch)
@@ -522,7 +521,6 @@ describe('putUploadFile', () => {
       ok: false,
       status: 400,
       statusText: 'Bad Request',
-      json: () => Promise.reject(new Error('not JSON')),
       text: () => Promise.resolve('Missing Content-Length header'),
     })
     vi.stubGlobal('fetch', mockFetch)

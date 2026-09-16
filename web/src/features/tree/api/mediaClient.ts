@@ -315,20 +315,19 @@ export async function putUploadFile(
     case 400: {
       let serverError: string | undefined
       try {
-        const body = await res.json()
-        if (body && typeof body.error === 'string') {
-          serverError = body.error
-        }
-      } catch {
-        // JSON parse failed, try text
-        try {
-          const text = await res.text()
-          if (text) {
+        const text = await res.text()
+        if (text) {
+          try {
+            const body = JSON.parse(text)
+            if (body && typeof body.error === 'string') {
+              serverError = body.error
+            }
+          } catch {
             serverError = text
           }
-        } catch {
-          // ignore
         }
+      } catch {
+        // ignore read errors
       }
       if (serverError && /content.?type/i.test(serverError)) {
         throw MediaApiError.putContentTypeMismatch()
