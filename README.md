@@ -63,19 +63,29 @@ curl http://localhost:8080/healthz
 
 See [web/README.md](web/README.md) for frontend development instructions.
 
-## Current Status (Phase 0)
+### Local Development Guide
+
+For a complete walkthrough on running the demo locally, see **[docs/LOCAL.md](docs/LOCAL.md)** — covers prerequisites, database setup, environment variables, and the register/login flow.
+
+## Current Status
 
 ### Implemented
 - ✅ Spring Boot scaffold with strict dependency allowlist
 - ✅ `GET /healthz` endpoint
-- ✅ Flyway migration directory (empty, Phase 1)
-- ✅ MyBatis configuration
+- ✅ Flyway migrations with schema (persons, families, relationships, unions, users, stories)
+- ✅ MyBatis data access layer
+- ✅ JWT authentication (`POST /api/v1/auth/register`, `POST /api/v1/auth/login`)
+- ✅ Person/Family/Relationship/Union CRUD
+- ✅ Family graph query API
+- ✅ Local media upload
+- ✅ Family stories feature
+- ✅ Vue 3 frontend with mock data support
 
-### Not Yet Implemented (Phase 1+)
-- ❌ Person/Family/Relationship CRUD
-- ❌ Kinship graph (ported from Go)
-- ❌ Database schema migrations
-- ❌ Authentication
+### Not Yet Implemented
+- ❌ SSO / OAuth third-party login
+- ❌ Pedigree print/export (PDF/image)
+- ❌ Historical point-in-time view (asOf)
+- ❌ Real-time collaborative editing
 
 ## Design Decisions
 
