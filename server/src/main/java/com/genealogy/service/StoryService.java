@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -69,11 +68,24 @@ public class StoryService {
         }
     }
 
+    public static class InvalidPersonRefException extends RuntimeException {
+        public InvalidPersonRefException(String message) {
+            super(message);
+        }
+    }
+
+    public record PersonRefInput(UUID personId, String displayNameSnapshot) {}
+
     @Transactional
     public Story createStory(UUID familyId, UUID creatorId, String title, String body,
-                             LocalDate narrativeTime, List<UUID> personIds) {
+                             LocalDate narrativeTime, List<UUID> personIds,
+                             List<PersonRefInput> personRefs, Role userRole) {
+        if (userRole == null || !userRole.canWrite()) {
+            throw new WriteAccessDeniedException();
+        }
         validateBody(body);
         validatePersonIds(familyId, personIds);
+        validatePersonRefs(familyId, personRefs, userRole);
 
         UUID storyId = UUID.randomUUID();
         Story story = new Story(
@@ -90,19 +102,31 @@ public class StoryService {
                 personIds != null ? personIds : List.of()
         );
 
-        storyStore.createStory(story);
-        return storyStore.getStory(storyId).orElseThrow(StoryNotFoundException::new);
+        List<StoryStore.PersonRefInput> storePersonRefs = personRefs != null
+                ? personRefs.stream()
+                    .map(r -> new StoryStore.PersonRefInput(r.personId(), r.displayNameSnapshot()))
+                    .collect(Collectors.toList())
+                : null;
+
+        storyStore.createStory(story, storePersonRefs);
+        return storyStore.getStory(storyId, userRole).orElseThrow(StoryNotFoundException::new);
+    }
+
+    @Transactional
+    public Story createStory(UUID familyId, UUID creatorId, String title, String body,
+                             LocalDate narrativeTime, List<UUID> personIds, Role userRole) {
+        return createStory(familyId, creatorId, title, body, narrativeTime, personIds, null, userRole);
     }
 
     @Transactional
     public Story updateStory(UUID familyId, UUID storyId, UUID updaterId, Role role,
                              String title, String body, LocalDate narrativeTime,
-                             List<UUID> personIds, int expectedVersion) {
+                             List<UUID> personIds, PersonRefUpdateAction personRefAction, int expectedVersion) {
         if (role == null || !role.canWrite()) {
             throw new WriteAccessDeniedException();
         }
 
-        Optional<Story> existingOpt = storyStore.getStoryByIdAndFamilyId(storyId, familyId);
+        Optional<Story> existingOpt = storyStore.getStoryByIdAndFamilyId(storyId, familyId, role);
         if (existingOpt.isEmpty()) {
             throw new StoryNotFoundException();
         }
@@ -115,6 +139,10 @@ public class StoryService {
 
         validateBody(body);
         validatePersonIds(familyId, personIds);
+
+        if (personRefAction instanceof PersonRefUpdateAction.Replace replace) {
+            validatePersonRefsForUpdate(familyId, replace.personRefs(), role);
+        }
 
         Story updated = new Story(
                 storyId,
@@ -130,14 +158,22 @@ public class StoryService {
                 personIds != null ? personIds : List.of()
         );
 
-        StoryStore.WriteResult result = storyStore.updateStory(updated, expectedVersion);
+        StoryStore.WriteResult result = storyStore.updateStory(updated, expectedVersion, personRefAction, role);
         if (result instanceof StoryStore.WriteResult.NotFound) {
             throw new StoryNotFoundException();
         } else if (result instanceof StoryStore.WriteResult.VersionConflict conflict) {
             throw new VersionConflictException(conflict.currentStory());
         }
 
-        return storyStore.getStory(storyId).orElseThrow(StoryNotFoundException::new);
+        return storyStore.getStory(storyId, role).orElseThrow(StoryNotFoundException::new);
+    }
+
+    @Transactional
+    public Story updateStory(UUID familyId, UUID storyId, UUID updaterId, Role role,
+                             String title, String body, LocalDate narrativeTime,
+                             List<UUID> personIds, int expectedVersion) {
+        return updateStory(familyId, storyId, updaterId, role, title, body, narrativeTime,
+                personIds, new PersonRefUpdateAction.Omit(), expectedVersion);
     }
 
     @Transactional
@@ -146,7 +182,7 @@ public class StoryService {
             throw new WriteAccessDeniedException();
         }
 
-        Optional<Story> existingOpt = storyStore.getStoryByIdAndFamilyId(storyId, familyId);
+        Optional<Story> existingOpt = storyStore.getStoryByIdAndFamilyId(storyId, familyId, role);
         if (existingOpt.isEmpty()) {
             throw new StoryNotFoundException();
         }
@@ -156,7 +192,7 @@ public class StoryService {
             throw new VersionConflictException(existing);
         }
 
-        StoryStore.WriteResult result = storyStore.deleteStory(storyId, expectedVersion);
+        StoryStore.WriteResult result = storyStore.deleteStory(storyId, expectedVersion, role);
         if (result instanceof StoryStore.WriteResult.NotFound) {
             throw new StoryNotFoundException();
         } else if (result instanceof StoryStore.WriteResult.VersionConflict conflict) {
@@ -166,7 +202,7 @@ public class StoryService {
 
     @Transactional(readOnly = true)
     public Optional<Story> getStory(UUID familyId, UUID storyId, Role userRole) {
-        Optional<Story> storyOpt = storyStore.getStoryByIdAndFamilyId(storyId, familyId);
+        Optional<Story> storyOpt = storyStore.getStoryByIdAndFamilyId(storyId, familyId, userRole);
         if (storyOpt.isEmpty()) {
             return Optional.empty();
         }
@@ -184,9 +220,9 @@ public class StoryService {
     public List<Story> listStories(UUID familyId, UUID personIdFilter, Role userRole) {
         List<Story> stories;
         if (personIdFilter != null) {
-            stories = storyStore.listByFamilyAndPerson(familyId, personIdFilter);
+            stories = storyStore.listByFamilyAndPerson(familyId, personIdFilter, userRole);
         } else {
-            stories = storyStore.listByFamily(familyId);
+            stories = storyStore.listByFamily(familyId, userRole);
         }
 
         return stories.stream()
@@ -230,6 +266,50 @@ public class StoryService {
         for (UUID personId : personIds) {
             if (!personStore.existsInFamily(personId, familyId)) {
                 throw new InvalidPersonException("person " + personId + " not found in family");
+            }
+        }
+    }
+
+    private void validatePersonRefs(UUID familyId, List<PersonRefInput> personRefs, Role userRole) {
+        if (personRefs == null || personRefs.isEmpty()) {
+            return;
+        }
+
+        for (PersonRefInput ref : personRefs) {
+            if (ref.personId() == null) {
+                throw new InvalidPersonRefException("person_ref person_id is required");
+            }
+            if (ref.displayNameSnapshot() == null || ref.displayNameSnapshot().isBlank()) {
+                throw new InvalidPersonRefException("person_ref display_name_snapshot is required");
+            }
+            if (!personStore.existsInFamily(ref.personId(), familyId)) {
+                throw new InvalidPersonRefException("referenced person is not in this family or has been deleted");
+            }
+            Optional<ProjectionPerson> personOpt = projectionStore.getPerson(ref.personId());
+            if (personOpt.isPresent() && personOpt.get().isHidden() && !userRole.canWrite()) {
+                throw new InvalidPersonRefException("referenced person is not visible to current user");
+            }
+        }
+    }
+
+    private void validatePersonRefsForUpdate(UUID familyId, List<PersonRefUpdateAction.Replace.PersonRefInput> personRefs, Role userRole) {
+        if (personRefs == null || personRefs.isEmpty()) {
+            return;
+        }
+
+        for (PersonRefUpdateAction.Replace.PersonRefInput ref : personRefs) {
+            if (ref.personId() == null) {
+                throw new InvalidPersonRefException("person_ref person_id is required");
+            }
+            if (ref.displayNameSnapshot() == null || ref.displayNameSnapshot().isBlank()) {
+                throw new InvalidPersonRefException("person_ref display_name_snapshot is required");
+            }
+            if (!personStore.existsInFamily(ref.personId(), familyId)) {
+                throw new InvalidPersonRefException("referenced person is not in this family or has been deleted");
+            }
+            Optional<ProjectionPerson> personOpt = projectionStore.getPerson(ref.personId());
+            if (personOpt.isPresent() && personOpt.get().isHidden() && !userRole.canWrite()) {
+                throw new InvalidPersonRefException("referenced person is not visible to current user");
             }
         }
     }

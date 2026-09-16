@@ -24,6 +24,9 @@ public class CommentResponse {
 
     private final List<MentionResponse> mentions;
 
+    @JsonProperty("person_refs")
+    private final List<PersonRefResponse> personRefs;
+
     @JsonProperty("created_at")
     private final String createdAt;
 
@@ -31,12 +34,14 @@ public class CommentResponse {
     private final String updatedAt;
 
     public CommentResponse(String id, String storyId, String authorUserId, String body,
-                           List<MentionResponse> mentions, String createdAt, String updatedAt) {
+                           List<MentionResponse> mentions, List<PersonRefResponse> personRefs,
+                           String createdAt, String updatedAt) {
         this.id = id;
         this.storyId = storyId;
         this.authorUserId = authorUserId;
         this.body = body;
         this.mentions = mentions;
+        this.personRefs = personRefs;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -46,12 +51,17 @@ public class CommentResponse {
                 .map(MentionResponse::fromMention)
                 .collect(Collectors.toList());
 
+        List<PersonRefResponse> personRefResponses = comment.getPersonRefs().stream()
+                .map(PersonRefResponse::fromCommentPersonRef)
+                .collect(Collectors.toList());
+
         return new CommentResponse(
                 comment.getId().toString(),
                 comment.getStoryId().toString(),
                 comment.getAuthorUserId().toString(),
                 comment.getBody(),
                 mentionResponses.isEmpty() ? null : mentionResponses,
+                personRefResponses.isEmpty() ? null : personRefResponses,
                 comment.getCreatedAt() != null ? INSTANT_FORMATTER.format(comment.getCreatedAt()) : null,
                 comment.getUpdatedAt() != null ? INSTANT_FORMATTER.format(comment.getUpdatedAt()) : null
         );
@@ -75,6 +85,10 @@ public class CommentResponse {
 
     public List<MentionResponse> getMentions() {
         return mentions;
+    }
+
+    public List<PersonRefResponse> getPersonRefs() {
+        return personRefs;
     }
 
     public String getCreatedAt() {

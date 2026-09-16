@@ -1,9 +1,12 @@
 package com.genealogy.service;
 
 import com.genealogy.domain.family.Role;
+import com.genealogy.domain.projection.ProjectionPerson;
 import com.genealogy.domain.story.Story;
 import com.genealogy.domain.story.StoryComment;
 import com.genealogy.store.FamilyStore;
+import com.genealogy.store.PersonStore;
+import com.genealogy.store.ProjectionStore;
 import com.genealogy.store.StoryCommentStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,11 +22,17 @@ public class StoryCommentService {
     private final StoryCommentStore commentStore;
     private final StoryService storyService;
     private final FamilyStore familyStore;
+    private final PersonStore personStore;
+    private final ProjectionStore projectionStore;
 
-    public StoryCommentService(StoryCommentStore commentStore, StoryService storyService, FamilyStore familyStore) {
+    public StoryCommentService(StoryCommentStore commentStore, StoryService storyService,
+                               FamilyStore familyStore, PersonStore personStore,
+                               ProjectionStore projectionStore) {
         this.commentStore = commentStore;
         this.storyService = storyService;
         this.familyStore = familyStore;
+        this.personStore = personStore;
+        this.projectionStore = projectionStore;
     }
 
     public static class CommentNotFoundException extends RuntimeException {
@@ -75,11 +84,19 @@ public class StoryCommentService {
         }
     }
 
+    public static class InvalidPersonRefException extends RuntimeException {
+        public InvalidPersonRefException(String message) {
+            super(message);
+        }
+    }
+
     public record MentionInput(UUID userId, String displayNameSnapshot) {}
+    public record PersonRefInput(UUID personId, String displayNameSnapshot) {}
 
     @Transactional
     public StoryComment createComment(UUID familyId, UUID storyId, UUID authorUserId,
-                                      String body, List<MentionInput> mentions, Role userRole) {
+                                      String body, List<MentionInput> mentions,
+                                      List<PersonRefInput> personRefs, Role userRole) {
         if (!userRole.canWrite()) {
             throw new PermissionDeniedException("only admin or editor can create comments");
         }
@@ -91,6 +108,7 @@ public class StoryCommentService {
 
         validateBody(body);
         validateMentions(familyId, mentions);
+        validatePersonRefs(familyId, personRefs, userRole);
 
         UUID commentId = UUID.randomUUID();
         StoryComment comment = new StoryComment(
@@ -108,13 +126,27 @@ public class StoryCommentService {
                     .collect(Collectors.toList())
                 : null;
 
-        commentStore.createComment(comment, storeMentions);
-        return commentStore.getComment(commentId, familyId).orElseThrow(CommentNotFoundException::new);
+        List<StoryCommentStore.PersonRefInput> storePersonRefs = personRefs != null
+                ? personRefs.stream()
+                    .map(r -> new StoryCommentStore.PersonRefInput(r.personId(), r.displayNameSnapshot()))
+                    .collect(Collectors.toList())
+                : null;
+
+        commentStore.createComment(comment, storeMentions, storePersonRefs);
+        return commentStore.getComment(commentId, familyId, userRole).orElseThrow(CommentNotFoundException::new);
+    }
+
+    @Transactional
+    public StoryComment createComment(UUID familyId, UUID storyId, UUID authorUserId,
+                                      String body, List<MentionInput> mentions, Role userRole) {
+        return createComment(familyId, storyId, authorUserId, body, mentions, null, userRole);
     }
 
     @Transactional
     public StoryComment updateComment(UUID familyId, UUID storyId, UUID commentId,
-                                      UUID requestingUserId, String body, MentionUpdateAction mentionAction,
+                                      UUID requestingUserId, String body,
+                                      MentionUpdateAction mentionAction,
+                                      PersonRefUpdateAction personRefAction,
                                       Instant expectedUpdatedAt, Role userRole) {
         if (!userRole.canWrite()) {
             throw new PermissionDeniedException("write access required");
@@ -125,7 +157,7 @@ public class StoryCommentService {
             throw new StoryNotFoundException();
         }
 
-        Optional<StoryComment> existingOpt = commentStore.getCommentByIdAndStoryId(commentId, storyId, familyId);
+        Optional<StoryComment> existingOpt = commentStore.getCommentByIdAndStoryId(commentId, storyId, familyId, userRole);
         if (existingOpt.isEmpty()) {
             throw new CommentNotFoundException();
         }
@@ -142,15 +174,20 @@ public class StoryCommentService {
             validateMentionsForUpdate(familyId, replace.mentions());
         }
 
+        if (personRefAction instanceof PersonRefUpdateAction.Replace replace) {
+            validatePersonRefsForUpdate(familyId, replace.personRefs(), userRole);
+        }
+
         StoryCommentStore.WriteResult result = commentStore.updateComment(
-                commentId, body, expectedUpdatedAt, mentionAction, familyId);
+                commentId, body, expectedUpdatedAt, mentionAction, personRefAction, familyId, userRole);
+
         if (result instanceof StoryCommentStore.WriteResult.NotFound) {
             throw new CommentNotFoundException();
         } else if (result instanceof StoryCommentStore.WriteResult.VersionConflict conflict) {
             throw new VersionConflictException(conflict.currentComment());
         }
 
-        return commentStore.getComment(commentId, familyId).orElseThrow(CommentNotFoundException::new);
+        return commentStore.getComment(commentId, familyId, userRole).orElseThrow(CommentNotFoundException::new);
     }
 
     @Transactional
@@ -165,7 +202,7 @@ public class StoryCommentService {
             throw new StoryNotFoundException();
         }
 
-        Optional<StoryComment> existingOpt = commentStore.getCommentByIdAndStoryId(commentId, storyId, familyId);
+        Optional<StoryComment> existingOpt = commentStore.getCommentByIdAndStoryId(commentId, storyId, familyId, userRole);
         if (existingOpt.isEmpty()) {
             throw new CommentNotFoundException();
         }
@@ -191,7 +228,7 @@ public class StoryCommentService {
             return Optional.empty();
         }
 
-        return commentStore.getCommentByIdAndStoryId(commentId, storyId, familyId);
+        return commentStore.getCommentByIdAndStoryId(commentId, storyId, familyId, userRole);
     }
 
     @Transactional(readOnly = true)
@@ -201,7 +238,7 @@ public class StoryCommentService {
             throw new StoryNotFoundException();
         }
 
-        return commentStore.listByStoryId(storyId, familyId);
+        return commentStore.listByStoryId(storyId, familyId, userRole);
     }
 
     private void validateBody(String body) {
@@ -231,10 +268,6 @@ public class StoryCommentService {
         }
     }
 
-    /**
-     * Validate mentions for update action (Replace).
-     * All user_ids in the request must be current family members.
-     */
     private void validateMentionsForUpdate(UUID familyId, List<MentionUpdateAction.Replace.MentionInput> mentions) {
         if (mentions == null || mentions.isEmpty()) {
             return;
@@ -249,6 +282,50 @@ public class StoryCommentService {
             }
             if (!familyStore.isMember(familyId, mention.userId())) {
                 throw new InvalidMentionException("mentioned user is not a current family member");
+            }
+        }
+    }
+
+    private void validatePersonRefs(UUID familyId, List<PersonRefInput> personRefs, Role userRole) {
+        if (personRefs == null || personRefs.isEmpty()) {
+            return;
+        }
+
+        for (PersonRefInput ref : personRefs) {
+            if (ref.personId() == null) {
+                throw new InvalidPersonRefException("person_ref person_id is required");
+            }
+            if (ref.displayNameSnapshot() == null || ref.displayNameSnapshot().isBlank()) {
+                throw new InvalidPersonRefException("person_ref display_name_snapshot is required");
+            }
+            if (!personStore.existsInFamily(ref.personId(), familyId)) {
+                throw new InvalidPersonRefException("referenced person is not in this family or has been deleted");
+            }
+            Optional<ProjectionPerson> personOpt = projectionStore.getPerson(ref.personId());
+            if (personOpt.isPresent() && personOpt.get().isHidden() && !userRole.canWrite()) {
+                throw new InvalidPersonRefException("referenced person is not visible to current user");
+            }
+        }
+    }
+
+    private void validatePersonRefsForUpdate(UUID familyId, List<PersonRefUpdateAction.Replace.PersonRefInput> personRefs, Role userRole) {
+        if (personRefs == null || personRefs.isEmpty()) {
+            return;
+        }
+
+        for (PersonRefUpdateAction.Replace.PersonRefInput ref : personRefs) {
+            if (ref.personId() == null) {
+                throw new InvalidPersonRefException("person_ref person_id is required");
+            }
+            if (ref.displayNameSnapshot() == null || ref.displayNameSnapshot().isBlank()) {
+                throw new InvalidPersonRefException("person_ref display_name_snapshot is required");
+            }
+            if (!personStore.existsInFamily(ref.personId(), familyId)) {
+                throw new InvalidPersonRefException("referenced person is not in this family or has been deleted");
+            }
+            Optional<ProjectionPerson> personOpt = projectionStore.getPerson(ref.personId());
+            if (personOpt.isPresent() && personOpt.get().isHidden() && !userRole.canWrite()) {
+                throw new InvalidPersonRefException("referenced person is not visible to current user");
             }
         }
     }

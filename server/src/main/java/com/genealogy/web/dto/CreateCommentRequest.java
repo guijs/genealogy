@@ -1,10 +1,15 @@
 package com.genealogy.web.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 
 public class CreateCommentRequest {
     private String body;
     private List<MentionRequest> mentions;
+
+    @JsonProperty("person_refs")
+    private List<PersonRefRequest> personRefs;
 
     public CreateCommentRequest() {
     }
@@ -14,8 +19,13 @@ public class CreateCommentRequest {
     }
 
     public CreateCommentRequest(String body, List<MentionRequest> mentions) {
+        this(body, mentions, null);
+    }
+
+    public CreateCommentRequest(String body, List<MentionRequest> mentions, List<PersonRefRequest> personRefs) {
         this.body = body;
         this.mentions = mentions;
+        this.personRefs = personRefs;
     }
 
     public String getBody() {
@@ -32,5 +42,13 @@ public class CreateCommentRequest {
 
     public void setMentions(List<MentionRequest> mentions) {
         this.mentions = mentions;
+    }
+
+    public List<PersonRefRequest> getPersonRefs() {
+        return personRefs;
+    }
+
+    public void setPersonRefs(List<PersonRefRequest> personRefs) {
+        this.personRefs = personRefs;
     }
 }

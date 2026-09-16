@@ -13,14 +13,21 @@ public class StoryComment {
     private final Instant createdAt;
     private final Instant updatedAt;
     private final List<CommentMention> mentions;
+    private final List<CommentPersonRef> personRefs;
 
     public StoryComment(UUID id, UUID storyId, UUID authorUserId, String body,
                         Instant createdAt, Instant updatedAt) {
-        this(id, storyId, authorUserId, body, createdAt, updatedAt, Collections.emptyList());
+        this(id, storyId, authorUserId, body, createdAt, updatedAt, Collections.emptyList(), Collections.emptyList());
     }
 
     public StoryComment(UUID id, UUID storyId, UUID authorUserId, String body,
                         Instant createdAt, Instant updatedAt, List<CommentMention> mentions) {
+        this(id, storyId, authorUserId, body, createdAt, updatedAt, mentions, Collections.emptyList());
+    }
+
+    public StoryComment(UUID id, UUID storyId, UUID authorUserId, String body,
+                        Instant createdAt, Instant updatedAt, List<CommentMention> mentions,
+                        List<CommentPersonRef> personRefs) {
         this.id = id;
         this.storyId = storyId;
         this.authorUserId = authorUserId;
@@ -28,6 +35,7 @@ public class StoryComment {
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
         this.mentions = mentions != null ? mentions : Collections.emptyList();
+        this.personRefs = personRefs != null ? personRefs : Collections.emptyList();
     }
 
     public UUID getId() {
@@ -56,5 +64,9 @@ public class StoryComment {
 
     public List<CommentMention> getMentions() {
         return mentions;
+    }
+
+    public List<CommentPersonRef> getPersonRefs() {
+        return personRefs;
     }
 }
