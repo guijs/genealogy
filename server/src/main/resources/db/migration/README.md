@@ -15,8 +15,14 @@ Examples:
 - `V2__add_relationship_table.sql`
 - `V3__add_family_table.sql`
 
-## Status
+## Current Migrations
 
-**Phase 0**: No business schema migrations yet. This is a placeholder directory.
+| Version | Description |
+|---------|-------------|
+| V1 | Initial schema (families, family_members, persons, relationships, unions) |
+| V2 | Users table for JWT authentication |
+| V3 | Progenitor support |
+| V4 | Generation names |
+| V5 | Stories feature |
 
-Business domain migrations will be added in Phase 1 when CRUD operations are implemented.
+Migrations are automatically applied on Spring Boot startup via `flyway.baseline-on-migrate: true`.
