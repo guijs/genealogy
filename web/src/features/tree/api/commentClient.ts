@@ -64,6 +64,14 @@ export class CommentApiError extends Error {
     )
   }
 
+  static invalidMention(): CommentApiError {
+    return new CommentApiError(
+      '提及的成员无效或不是当前家族成员',
+      400,
+      'INVALID_MENTION',
+    )
+  }
+
   static versionConflict(currentComment: CommentResponse): CommentApiError {
     return new CommentApiError(
       '评论已被更新，已加载最新内容',
@@ -232,9 +240,9 @@ export async function getComment(
  *
  * @param familyId - The family ID
  * @param storyId - The story ID
- * @param data - CreateCommentRequest { body }
+ * @param data - CreateCommentRequest { body, mentions? }
  * @returns CommentResponse (201 Created)
- * @throws CommentApiError
+ * @throws CommentApiError - 400 for invalid mentions (non-current-member user_id)
  */
 export async function createComment(
   familyId: string,
@@ -262,6 +270,9 @@ export async function createComment(
   })
 
   if (!res.ok) {
+    if (res.status === 400 && data.mentions && data.mentions.length > 0) {
+      throw CommentApiError.invalidMention()
+    }
     throw CommentApiError.fromStatus(res.status, 'create')
   }
 
@@ -275,9 +286,10 @@ export async function createComment(
  * @param familyId - The family ID
  * @param storyId - The story ID
  * @param commentId - The comment ID
- * @param data - UpdateCommentRequest { body, updated_at }
+ * @param data - UpdateCommentRequest { body, updated_at, mentions? }
  * @returns CommentResponse
  * @throws CommentApiError - On 409, conflictComment contains the current comment from server
+ *                          On 400 with mentions, throws INVALID_MENTION error
  */
 export async function updateComment(
   familyId: string,
@@ -313,6 +325,9 @@ export async function updateComment(
     if (res.status === 409) {
       const currentComment = (await res.json()) as CommentResponse
       throw CommentApiError.versionConflict(currentComment)
+    }
+    if (res.status === 400 && data.mentions && data.mentions.length > 0) {
+      throw CommentApiError.invalidMention()
     }
     throw CommentApiError.fromStatus(res.status, 'update')
   }

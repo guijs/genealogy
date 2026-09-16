@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import StoryCommentsPanel from './StoryCommentsPanel.vue'
-import type { CommentResponse } from '../api/types'
+import type { CommentResponse, MentionResponse } from '../api/types'
 import type { FamilyMember } from '../api/memberClient'
 
 vi.mock('../api/commentClient', () => ({
@@ -22,7 +22,7 @@ vi.mock('../api/commentClient', () => ({
   COMMENT_BODY_MAX_LENGTH: 2000,
 }))
 
-import { listComments, deleteComment } from '../api/commentClient'
+import { listComments, createComment, deleteComment } from '../api/commentClient'
 
 const mockComment = (overrides: Partial<CommentResponse> = {}): CommentResponse => ({
   id: 'comment-1',
@@ -180,6 +180,130 @@ describe('StoryCommentsPanel', () => {
 
       expect(wrapper.find('.modal-overlay').exists()).toBe(false)
       expect(wrapper.findAll('.comment-item').length).toBe(0)
+    })
+  })
+
+  describe('mention display', () => {
+    it('displays active mentions with highlight styling', async () => {
+      const activeMention: MentionResponse = {
+        user_id: 'user-mentioned',
+        display_name_snapshot: '成员 user-men（编辑）',
+        status: 'active',
+      }
+      const commentWithMention = mockComment({
+        mentions: [activeMention],
+      })
+      vi.mocked(listComments).mockResolvedValue({ comments: [commentWithMention] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-viewer',
+          members: [mockMember({ user_id: 'user-viewer', role: 'viewer' })],
+          isAdmin: false,
+          canWrite: false,
+        },
+      })
+
+      await flushPromises()
+
+      const mentionDisplay = wrapper.find('.mention-active')
+      expect(mentionDisplay.exists()).toBe(true)
+      expect(mentionDisplay.text()).toContain('@成员 user-men（编辑）')
+    })
+
+    it('displays left/removed mentions with muted styling', async () => {
+      const leftMention: MentionResponse = {
+        user_id: null,
+        display_name_snapshot: '成员 user-lef（已离开）',
+        status: 'left',
+      }
+      const removedMention: MentionResponse = {
+        user_id: 'user-removed',
+        display_name_snapshot: '成员 user-rem（已移除）',
+        status: 'removed',
+      }
+      const commentWithMentions = mockComment({
+        mentions: [leftMention, removedMention],
+      })
+      vi.mocked(listComments).mockResolvedValue({ comments: [commentWithMentions] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-viewer',
+          members: [mockMember({ user_id: 'user-viewer', role: 'viewer' })],
+          isAdmin: false,
+          canWrite: false,
+        },
+      })
+
+      await flushPromises()
+
+      const inactiveMentions = wrapper.findAll('.mention-inactive')
+      expect(inactiveMentions.length).toBe(2)
+      expect(inactiveMentions[0].text()).toContain('@成员 user-lef（已离开）')
+      expect(inactiveMentions[1].text()).toContain('@成员 user-rem（已移除）')
+    })
+
+    it('shows mention picker placeholder in compose textarea', async () => {
+      vi.mocked(listComments).mockResolvedValue({ comments: [] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-editor',
+          members: [mockMember({ user_id: 'user-editor', role: 'editor' })],
+          isAdmin: false,
+          canWrite: true,
+        },
+      })
+
+      await flushPromises()
+
+      const textarea = wrapper.find('.compose-section textarea')
+      expect(textarea.exists()).toBe(true)
+      expect(textarea.attributes('placeholder')).toContain('@')
+    })
+
+    it('creates comment with mentions in request', async () => {
+      vi.mocked(listComments).mockResolvedValue({ comments: [] })
+      vi.mocked(createComment).mockResolvedValue(mockComment())
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-editor',
+          members: [
+            mockMember({ user_id: 'user-editor', role: 'editor' }),
+            mockMember({ user_id: 'user-other', role: 'viewer' }),
+          ],
+          isAdmin: false,
+          canWrite: true,
+        },
+      })
+
+      await flushPromises()
+
+      const textarea = wrapper.find('.compose-section textarea')
+      await textarea.setValue('Test comment')
+
+      const submitBtn = wrapper.find('.compose-section .btn-primary')
+      await submitBtn.trigger('click')
+
+      await flushPromises()
+
+      expect(createComment).toHaveBeenCalledWith(
+        'family-1',
+        'story-1',
+        expect.objectContaining({
+          body: 'Test comment',
+        }),
+      )
     })
   })
 })
