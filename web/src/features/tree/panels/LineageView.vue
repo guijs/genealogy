@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import type { LineageResponse } from '../api/types'
+import type { LineageResponse, GenerationNameAlign } from '../api/types'
 import { fetchLineage, setProgenitor, getLineageLabel, LineageApiError } from '../api/lineageClient'
+import {
+  fetchGenerationNames,
+  updateGenerationNames,
+  validateGenerationNames,
+  GenerationNamesApiError,
+} from '../api/generationNamesClient'
 import { listMembers, type FamilyMember, MemberApiError } from '../api/memberClient'
 import { listPersons as apiListPersons, type PersonResponse } from '../api/personClient'
 import { getCurrentUserId } from '../api/auth'
@@ -39,6 +45,12 @@ const selectedProgenitorId = ref('')
 const submitting = ref(false)
 const clearConfirmOpen = ref(false)
 const changeConfirmOpen = ref(false)
+
+const generationNamesEditorOpen = ref(false)
+const editingGenerationNames = ref<string[]>([])
+const editingGenerationNameAlign = ref<GenerationNameAlign>('A')
+const generationNamesSubmitting = ref(false)
+const generationNamesError = ref<string | null>(null)
 
 const availablePersons = computed(() => {
   return persons.value.filter((p) => p.id !== lineage.value?.progenitor_person_id)
@@ -181,6 +193,98 @@ async function handlePersonClick(personId: string) {
   await store.selectPersonWithFocus(personId)
 }
 
+function formatGenerationName(name: string | null | undefined): { text: string; type: 'normal' | 'empty-slot' | 'none' } {
+  if (name === null || name === undefined) {
+    return { text: '—', type: 'none' }
+  }
+  if (name === '') {
+    return { text: '空档', type: 'empty-slot' }
+  }
+  return { text: name, type: 'normal' }
+}
+
+function getAlignLabel(align: GenerationNameAlign): string {
+  if (align === 'A') {
+    return 'A（第2世起）'
+  }
+  return 'B（第1世起）'
+}
+
+async function openGenerationNamesEditor() {
+  generationNamesError.value = null
+  generationNamesSubmitting.value = false
+
+  try {
+    const config = await fetchGenerationNames({ familyId: currentFamilyId.value! })
+    editingGenerationNames.value = config.generation_names ? [...config.generation_names] : []
+    editingGenerationNameAlign.value = config.generation_name_align || 'A'
+  } catch (e) {
+    editingGenerationNames.value = []
+    editingGenerationNameAlign.value = lineage.value?.generation_name_align || 'A'
+  }
+
+  generationNamesEditorOpen.value = true
+}
+
+function closeGenerationNamesEditor() {
+  generationNamesEditorOpen.value = false
+  editingGenerationNames.value = []
+  generationNamesError.value = null
+}
+
+function addGenerationNameEntry() {
+  editingGenerationNames.value.push('')
+}
+
+function removeGenerationNameEntry(index: number) {
+  editingGenerationNames.value.splice(index, 1)
+}
+
+function moveGenerationNameUp(index: number) {
+  if (index <= 0) return
+  const temp = editingGenerationNames.value[index]
+  editingGenerationNames.value[index] = editingGenerationNames.value[index - 1]
+  editingGenerationNames.value[index - 1] = temp
+}
+
+function moveGenerationNameDown(index: number) {
+  if (index >= editingGenerationNames.value.length - 1) return
+  const temp = editingGenerationNames.value[index]
+  editingGenerationNames.value[index] = editingGenerationNames.value[index + 1]
+  editingGenerationNames.value[index + 1] = temp
+}
+
+async function handleSaveGenerationNames() {
+  if (!currentFamilyId.value) return
+
+  const validationError = validateGenerationNames(editingGenerationNames.value)
+  if (validationError) {
+    generationNamesError.value = validationError
+    return
+  }
+
+  generationNamesSubmitting.value = true
+  generationNamesError.value = null
+
+  try {
+    await updateGenerationNames({
+      familyId: currentFamilyId.value,
+      generationNames: editingGenerationNames.value,
+      generationNameAlign: editingGenerationNameAlign.value,
+    })
+    closeGenerationNamesEditor()
+    await loadLineage()
+  } catch (e) {
+    if (e instanceof GenerationNamesApiError) {
+      generationNamesError.value = e.message
+    } else {
+      generationNamesError.value = '保存字辈设置失败'
+    }
+  } finally {
+    generationNamesSubmitting.value = false
+  }
+}
+
 onMounted(async () => {
   await Promise.all([loadLineage(), loadMembers(), loadPersons()])
 })
@@ -256,6 +360,14 @@ defineExpose({ reload: loadLineage })
         >
           清除始迁祖
         </button>
+        <span class="admin-bar-sep">|</span>
+        <button
+          type="button"
+          class="btn-admin"
+          @click="openGenerationNamesEditor"
+        >
+          编辑字辈
+        </button>
       </div>
 
       <div class="lineage-layers">
@@ -265,7 +377,30 @@ defineExpose({ reload: loadLineage })
           class="generation-layer"
           :class="{ 'is-progenitor': gen.index === 1 }"
         >
-          <h3 class="layer-label">{{ getLineageLabel(gen.index) }}</h3>
+          <div class="layer-header">
+            <h3 class="layer-label">{{ getLineageLabel(gen.index) }}</h3>
+            <span
+              v-if="formatGenerationName(gen.generation_name).type === 'normal'"
+              class="gen-name-badge gen-name-normal"
+              :title="'期望辈字：' + gen.generation_name"
+            >
+              {{ formatGenerationName(gen.generation_name).text }}
+            </span>
+            <span
+              v-else-if="formatGenerationName(gen.generation_name).type === 'empty-slot'"
+              class="gen-name-badge gen-name-empty-slot"
+              title="此世空档（无辈字字符）"
+            >
+              {{ formatGenerationName(gen.generation_name).text }}
+            </span>
+            <span
+              v-else
+              class="gen-name-badge gen-name-none"
+              title="无辈字"
+            >
+              {{ formatGenerationName(gen.generation_name).text }}
+            </span>
+          </div>
           <ul class="persons-list">
             <li
               v-for="person in gen.persons"
@@ -414,6 +549,130 @@ defineExpose({ reload: loadLineage })
         </div>
       </div>
     </div>
+
+    <!-- Generation names editor modal -->
+    <div v-if="generationNamesEditorOpen" class="modal-overlay" @click.self="closeGenerationNamesEditor">
+      <div class="modal-box modal-box-wide">
+        <h2 class="modal-title">编辑字辈</h2>
+        <p class="modal-desc">
+          设置家族字辈（辈字诗），用于标识各世代期望的命名字符。留空表示该世空档。
+        </p>
+
+        <!-- Align selection -->
+        <div class="form-row">
+          <label class="form-label">对齐方式</label>
+          <div class="align-options">
+            <label class="align-option">
+              <input
+                type="radio"
+                v-model="editingGenerationNameAlign"
+                value="A"
+                :disabled="generationNamesSubmitting"
+              />
+              <span class="align-text">
+                <strong>A</strong>：第1世无辈字，第2世起使用（默认）
+              </span>
+            </label>
+            <label class="align-option">
+              <input
+                type="radio"
+                v-model="editingGenerationNameAlign"
+                value="B"
+                :disabled="generationNamesSubmitting"
+              />
+              <span class="align-text">
+                <strong>B</strong>：第1世起使用辈字
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Generation names list -->
+        <div class="form-row">
+          <label class="form-label">字辈序列（最多200个，每个最多16字符）</label>
+          <div class="gen-names-list">
+            <div
+              v-for="(name, index) in editingGenerationNames"
+              :key="index"
+              class="gen-name-row"
+            >
+              <span class="gen-name-index">{{ index + 1 }}</span>
+              <input
+                type="text"
+                v-model="editingGenerationNames[index]"
+                class="gen-name-input"
+                :placeholder="'第' + (index + 1) + '个'"
+                maxlength="16"
+                :disabled="generationNamesSubmitting"
+              />
+              <button
+                type="button"
+                class="gen-name-btn"
+                title="上移"
+                :disabled="generationNamesSubmitting || index === 0"
+                @click="moveGenerationNameUp(index)"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                class="gen-name-btn"
+                title="下移"
+                :disabled="generationNamesSubmitting || index === editingGenerationNames.length - 1"
+                @click="moveGenerationNameDown(index)"
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                class="gen-name-btn gen-name-btn-danger"
+                title="删除"
+                :disabled="generationNamesSubmitting"
+                @click="removeGenerationNameEntry(index)"
+              >
+                ×
+              </button>
+            </div>
+            <div v-if="editingGenerationNames.length === 0" class="gen-names-empty">
+              尚未添加字辈
+            </div>
+          </div>
+          <button
+            type="button"
+            class="btn-add-entry"
+            :disabled="generationNamesSubmitting || editingGenerationNames.length >= 200"
+            @click="addGenerationNameEntry"
+          >
+            + 添加字辈
+          </button>
+        </div>
+
+        <!-- Error display -->
+        <div v-if="generationNamesError" class="modal-error" role="alert">
+          {{ generationNamesError }}
+        </div>
+
+        <!-- Actions -->
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-submit"
+            :disabled="generationNamesSubmitting"
+            @click="handleSaveGenerationNames"
+          >
+            {{ generationNamesSubmitting ? '保存中…' : '保存' }}
+          </button>
+          <button
+            type="button"
+            class="btn-cancel"
+            :disabled="generationNamesSubmitting"
+            @click="closeGenerationNamesEditor"
+          >
+            取消
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -555,6 +814,10 @@ defineExpose({ reload: loadLineage })
 .btn-admin-danger:hover {
   background: #fef0f0;
 }
+.admin-bar-sep {
+  color: #ccc;
+  margin: 0 4px;
+}
 
 /* Lineage layers */
 .lineage-layers {
@@ -575,14 +838,49 @@ defineExpose({ reload: loadLineage })
   background: #f8fbfa;
 }
 
+.layer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
 .layer-label {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: var(--type-detail-section, 16px);
   font-weight: 600;
   color: var(--color-ink, #1f1f1f);
 }
 .generation-layer.is-progenitor .layer-label {
   color: var(--color-accent, #2f5d50);
+}
+
+.gen-name-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.gen-name-normal {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+.gen-name-empty-slot {
+  background: #fff8e1;
+  color: #f9a825;
+  border: 1px solid #ffe082;
+  font-size: 12px;
+}
+.gen-name-none {
+  background: #f5f5f5;
+  color: #9e9e9e;
+  border: 1px solid #e0e0e0;
 }
 
 .persons-list {
@@ -746,6 +1044,130 @@ defineExpose({ reload: loadLineage })
   cursor: pointer;
 }
 .btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Generation names editor modal */
+.modal-box-wide {
+  width: min(500px, 90%);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.align-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.align-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+.align-option input {
+  margin-top: 3px;
+}
+.align-text {
+  font-size: 14px;
+  color: #555;
+  line-height: 1.4;
+}
+.align-text strong {
+  color: #333;
+}
+
+.gen-names-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 8px;
+  background: #faf9f7;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #d8d4cc);
+}
+.gen-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gen-name-index {
+  width: 28px;
+  font-size: 13px;
+  color: #888;
+  text-align: right;
+  flex-shrink: 0;
+}
+.gen-name-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border, #d8d4cc);
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.gen-name-input:focus {
+  outline: none;
+  border-color: var(--color-accent, #2f5d50);
+}
+.gen-name-input:disabled {
+  background: #f0eeeb;
+  cursor: not-allowed;
+}
+.gen-name-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border, #d8d4cc);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+  flex-shrink: 0;
+}
+.gen-name-btn:hover:not(:disabled) {
+  background: #f5f4f3;
+  border-color: var(--color-accent, #2f5d50);
+  color: var(--color-accent, #2f5d50);
+}
+.gen-name-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.gen-name-btn-danger:hover:not(:disabled) {
+  background: #fef0f0;
+  border-color: #c53030;
+  color: #c53030;
+}
+.gen-names-empty {
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+  padding: 16px;
+}
+
+.btn-add-entry {
+  padding: 8px 16px;
+  border: 1px dashed var(--color-border, #d8d4cc);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-accent, #2f5d50);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-add-entry:hover:not(:disabled) {
+  background: rgba(47, 93, 80, 0.05);
+  border-color: var(--color-accent, #2f5d50);
+}
+.btn-add-entry:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
