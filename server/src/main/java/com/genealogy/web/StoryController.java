@@ -133,9 +133,12 @@ public class StoryController {
                     body.getBody(),
                     narrativeTime,
                     personIds,
-                    personRefs
+                    personRefs,
+                    membership.getRole()
             );
             return ResponseEntity.status(201).body(StoryResponse.fromStory(story));
+        } catch (StoryService.WriteAccessDeniedException e) {
+            return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
         } catch (StoryService.InvalidBodyException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryService.InvalidPersonException e) {

@@ -1,10 +1,12 @@
 package com.genealogy.service;
 
 import com.genealogy.domain.family.Role;
+import com.genealogy.domain.projection.ProjectionPerson;
 import com.genealogy.domain.story.Story;
 import com.genealogy.domain.story.StoryComment;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
+import com.genealogy.store.ProjectionStore;
 import com.genealogy.store.StoryCommentStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,13 +23,16 @@ public class StoryCommentService {
     private final StoryService storyService;
     private final FamilyStore familyStore;
     private final PersonStore personStore;
+    private final ProjectionStore projectionStore;
 
     public StoryCommentService(StoryCommentStore commentStore, StoryService storyService,
-                               FamilyStore familyStore, PersonStore personStore) {
+                               FamilyStore familyStore, PersonStore personStore,
+                               ProjectionStore projectionStore) {
         this.commentStore = commentStore;
         this.storyService = storyService;
         this.familyStore = familyStore;
         this.personStore = personStore;
+        this.projectionStore = projectionStore;
     }
 
     public static class CommentNotFoundException extends RuntimeException {
@@ -103,7 +108,7 @@ public class StoryCommentService {
 
         validateBody(body);
         validateMentions(familyId, mentions);
-        validatePersonRefs(familyId, personRefs);
+        validatePersonRefs(familyId, personRefs, userRole);
 
         UUID commentId = UUID.randomUUID();
         StoryComment comment = new StoryComment(
@@ -165,7 +170,7 @@ public class StoryCommentService {
         validateBody(body);
         validateMentions(familyId, mentions);
         if (personRefsProvided) {
-            validatePersonRefs(familyId, personRefs);
+            validatePersonRefs(familyId, personRefs, userRole);
         }
 
         List<StoryCommentStore.MentionInput> storeMentions = mentions != null
@@ -277,7 +282,7 @@ public class StoryCommentService {
         }
     }
 
-    private void validatePersonRefs(UUID familyId, List<PersonRefInput> personRefs) {
+    private void validatePersonRefs(UUID familyId, List<PersonRefInput> personRefs, Role userRole) {
         if (personRefs == null || personRefs.isEmpty()) {
             return;
         }
@@ -291,6 +296,10 @@ public class StoryCommentService {
             }
             if (!personStore.existsInFamily(ref.personId(), familyId)) {
                 throw new InvalidPersonRefException("referenced person is not in this family or has been deleted");
+            }
+            Optional<ProjectionPerson> personOpt = projectionStore.getPerson(ref.personId());
+            if (personOpt.isPresent() && personOpt.get().isHidden() && !userRole.canWrite()) {
+                throw new InvalidPersonRefException("referenced person is not visible to current user");
             }
         }
     }

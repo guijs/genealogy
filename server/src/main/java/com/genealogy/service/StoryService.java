@@ -79,10 +79,14 @@ public class StoryService {
 
     @Transactional
     public Story createStory(UUID familyId, UUID creatorId, String title, String body,
-                             LocalDate narrativeTime, List<UUID> personIds, List<PersonRefInput> personRefs) {
+                             LocalDate narrativeTime, List<UUID> personIds,
+                             List<PersonRefInput> personRefs, Role userRole) {
+        if (userRole == null || !userRole.canWrite()) {
+            throw new WriteAccessDeniedException();
+        }
         validateBody(body);
         validatePersonIds(familyId, personIds);
-        validatePersonRefs(familyId, personRefs);
+        validatePersonRefs(familyId, personRefs, userRole);
 
         UUID storyId = UUID.randomUUID();
         Story story = new Story(
@@ -111,8 +115,8 @@ public class StoryService {
 
     @Transactional
     public Story createStory(UUID familyId, UUID creatorId, String title, String body,
-                             LocalDate narrativeTime, List<UUID> personIds) {
-        return createStory(familyId, creatorId, title, body, narrativeTime, personIds, null);
+                             LocalDate narrativeTime, List<UUID> personIds, Role userRole) {
+        return createStory(familyId, creatorId, title, body, narrativeTime, personIds, null, userRole);
     }
 
     @Transactional
@@ -138,7 +142,7 @@ public class StoryService {
         validateBody(body);
         validatePersonIds(familyId, personIds);
         if (personRefsProvided) {
-            validatePersonRefs(familyId, personRefs);
+            validatePersonRefs(familyId, personRefs, role);
         }
 
         Story updated = new Story(
@@ -273,7 +277,7 @@ public class StoryService {
         }
     }
 
-    private void validatePersonRefs(UUID familyId, List<PersonRefInput> personRefs) {
+    private void validatePersonRefs(UUID familyId, List<PersonRefInput> personRefs, Role userRole) {
         if (personRefs == null || personRefs.isEmpty()) {
             return;
         }
@@ -287,6 +291,10 @@ public class StoryService {
             }
             if (!personStore.existsInFamily(ref.personId(), familyId)) {
                 throw new InvalidPersonRefException("referenced person is not in this family or has been deleted");
+            }
+            Optional<ProjectionPerson> personOpt = projectionStore.getPerson(ref.personId());
+            if (personOpt.isPresent() && personOpt.get().isHidden() && !userRole.canWrite()) {
+                throw new InvalidPersonRefException("referenced person is not visible to current user");
             }
         }
     }

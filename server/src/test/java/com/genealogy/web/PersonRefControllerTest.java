@@ -702,4 +702,124 @@ class PersonRefControllerTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.person_refs", hasSize(1)))
                 .andExpect(jsonPath("$.person_refs[0].person_id").value(PERSON_ID_1.toString()));
     }
+
+    // ====================
+    // 补充契约 §1: clickable 字段测试
+    // ====================
+
+    @Test
+    void readPersonRef_active_clickableTrue() throws Exception {
+        String body = """
+            {
+                "body": "引用正常人物",
+                "person_refs": [
+                    {
+                        "person_id": "%s",
+                        "display_name_snapshot": "张三"
+                    }
+                ]
+            }
+            """.formatted(PERSON_ID_1);
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.person_refs[0].status").value("active"))
+                .andExpect(jsonPath("$.person_refs[0].clickable").value(true))
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    @Test
+    void readPersonRef_hidden_clickableFalse() throws Exception {
+        String createBody = """
+            {
+                "body": "引用隐藏人物",
+                "person_refs": [
+                    {
+                        "person_id": "%s",
+                        "display_name_snapshot": "隐藏人物"
+                    }
+                ]
+            }
+            """.formatted(PERSON_ID_HIDDEN);
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.person_refs[0].status").value("hidden"))
+                .andExpect(jsonPath("$.person_refs[0].clickable").value(false));
+    }
+
+    @Test
+    void storyPersonRef_active_clickableTrue() throws Exception {
+        String body = """
+            {
+                "title": "测试故事",
+                "body": "引用正常人物",
+                "person_refs": [
+                    {
+                        "person_id": "%s",
+                        "display_name_snapshot": "张三"
+                    }
+                ]
+            }
+            """.formatted(PERSON_ID_1);
+
+        mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.person_refs[0].status").value("active"))
+                .andExpect(jsonPath("$.person_refs[0].clickable").value(true));
+    }
+
+    // ====================
+    // 补充契约 §5: 候选 API 测试
+    // ====================
+
+    @Test
+    void listPersonRefCandidates_editorSeesAllIncludingHidden() throws Exception {
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/person-ref-candidates")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates", hasSize(4)))
+                .andExpect(jsonPath("$.candidates[*].person_id", hasItem(PERSON_ID_1.toString())))
+                .andExpect(jsonPath("$.candidates[*].person_id", hasItem(PERSON_ID_2.toString())))
+                .andExpect(jsonPath("$.candidates[*].person_id", hasItem(PERSON_ID_HIDDEN.toString())))
+                .andExpect(jsonPath("$.candidates[*].person_id", hasItem(PERSON_ID_DECEASED.toString())));
+    }
+
+    @Test
+    void listPersonRefCandidates_viewerDoesNotSeeHidden() throws Exception {
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/person-ref-candidates")
+                        .header(AUTH_HEADER, bearerToken(VIEWER_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates", hasSize(3)))
+                .andExpect(jsonPath("$.candidates[*].person_id", hasItem(PERSON_ID_1.toString())))
+                .andExpect(jsonPath("$.candidates[*].person_id", hasItem(PERSON_ID_2.toString())))
+                .andExpect(jsonPath("$.candidates[*].person_id", hasItem(PERSON_ID_DECEASED.toString())))
+                .andExpect(jsonPath("$.candidates[*].person_id", not(hasItem(PERSON_ID_HIDDEN.toString()))));
+    }
+
+    @Test
+    void listPersonRefCandidates_includesDeceasedInfo() throws Exception {
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/person-ref-candidates")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates[?(@.person_id=='%s')].deceased", PERSON_ID_DECEASED.toString()).value(true))
+                .andExpect(jsonPath("$.candidates[?(@.person_id=='%s')].deceased", PERSON_ID_1.toString()).value(false));
+    }
+
+    @Test
+    void listPersonRefCandidates_excludesOtherFamily() throws Exception {
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/person-ref-candidates")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates[*].person_id", not(hasItem(PERSON_ID_OTHER_FAMILY.toString()))));
+    }
 }
