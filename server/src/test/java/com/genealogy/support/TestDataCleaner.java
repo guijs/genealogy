@@ -2,6 +2,7 @@ package com.genealogy.support;
 
 import com.genealogy.mapper.*;
 import com.genealogy.store.KinshipStore;
+import com.genealogy.store.StoryCommentStore;
 import com.genealogy.store.StoryStore;
 import com.genealogy.store.UserStore;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,7 @@ public class TestDataCleaner {
     private final KinshipStore kinshipStore;
     private final UserStore userStore;
     private final StoryStore storyStore;
+    private final StoryCommentStore commentStore;
 
     public TestDataCleaner(RelationshipMapper relationshipMapper,
                           UnionMapper unionMapper,
@@ -25,7 +27,8 @@ public class TestDataCleaner {
                           FamilyMapper familyMapper,
                           KinshipStore kinshipStore,
                           UserStore userStore,
-                          StoryStore storyStore) {
+                          StoryStore storyStore,
+                          StoryCommentStore commentStore) {
         this.relationshipMapper = relationshipMapper;
         this.unionMapper = unionMapper;
         this.personMapper = personMapper;
@@ -34,10 +37,12 @@ public class TestDataCleaner {
         this.kinshipStore = kinshipStore;
         this.userStore = userStore;
         this.storyStore = storyStore;
+        this.commentStore = commentStore;
     }
 
     @Transactional
     public void cleanAll() {
+        commentStore.clear();
         storyStore.clear();
         relationshipMapper.deleteAll();
         unionMapper.deleteAll();
