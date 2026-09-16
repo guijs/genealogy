@@ -40,6 +40,15 @@
         DELETE FROM comment_mentions WHERE comment_id = #{commentId}
     </delete>
 
+    <delete id="deleteByCommentIdAndUserIds">
+        DELETE FROM comment_mentions
+        WHERE comment_id = #{commentId}
+        AND user_id IN
+        <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+            #{userId}
+        </foreach>
+    </delete>
+
     <delete id="deleteAll">
         DELETE FROM comment_mentions
     </delete>

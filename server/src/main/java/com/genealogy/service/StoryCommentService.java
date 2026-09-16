@@ -114,7 +114,7 @@ public class StoryCommentService {
 
     @Transactional
     public StoryComment updateComment(UUID familyId, UUID storyId, UUID commentId,
-                                      UUID requestingUserId, String body, List<MentionInput> mentions,
+                                      UUID requestingUserId, String body, MentionUpdateAction mentionAction,
                                       Instant expectedUpdatedAt, Role userRole) {
         if (!userRole.canWrite()) {
             throw new PermissionDeniedException("write access required");
@@ -137,15 +137,13 @@ public class StoryCommentService {
         }
 
         validateBody(body);
-        validateMentions(familyId, mentions);
 
-        List<StoryCommentStore.MentionInput> storeMentions = mentions != null
-                ? mentions.stream()
-                    .map(m -> new StoryCommentStore.MentionInput(m.userId(), m.displayNameSnapshot()))
-                    .collect(Collectors.toList())
-                : null;
+        if (mentionAction instanceof MentionUpdateAction.Replace replace) {
+            validateMentionsForUpdate(familyId, replace.mentions());
+        }
 
-        StoryCommentStore.WriteResult result = commentStore.updateComment(commentId, body, expectedUpdatedAt, storeMentions, familyId);
+        StoryCommentStore.WriteResult result = commentStore.updateComment(
+                commentId, body, expectedUpdatedAt, mentionAction, familyId);
         if (result instanceof StoryCommentStore.WriteResult.NotFound) {
             throw new CommentNotFoundException();
         } else if (result instanceof StoryCommentStore.WriteResult.VersionConflict conflict) {
@@ -221,6 +219,28 @@ public class StoryCommentService {
         }
 
         for (MentionInput mention : mentions) {
+            if (mention.userId() == null) {
+                throw new InvalidMentionException("mention user_id is required");
+            }
+            if (mention.displayNameSnapshot() == null || mention.displayNameSnapshot().isBlank()) {
+                throw new InvalidMentionException("mention display_name_snapshot is required");
+            }
+            if (!familyStore.isMember(familyId, mention.userId())) {
+                throw new InvalidMentionException("mentioned user is not a current family member");
+            }
+        }
+    }
+
+    /**
+     * Validate mentions for update action (Replace).
+     * All user_ids in the request must be current family members.
+     */
+    private void validateMentionsForUpdate(UUID familyId, List<MentionUpdateAction.Replace.MentionInput> mentions) {
+        if (mentions == null || mentions.isEmpty()) {
+            return;
+        }
+
+        for (MentionUpdateAction.Replace.MentionInput mention : mentions) {
             if (mention.userId() == null) {
                 throw new InvalidMentionException("mention user_id is required");
             }

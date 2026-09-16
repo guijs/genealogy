@@ -1190,6 +1190,286 @@ class StoryCommentControllerTest extends BaseIntegrationTest {
     }
 
     // ====================
+    // MENTION UPDATE BUG FIX TESTS (PR#59 blocker)
+    // ====================
+
+    // Test: omit mentions field preserves existing mentions (including left members)
+    @Test
+    void updateComment_omitMentions_preservesExisting() throws Exception {
+        UUID tempUserId = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        familyStore.addMemberWithRole(FAMILY_ID, tempUserId, Role.EDITOR);
+
+        // Create comment with mention
+        String createBody = """
+            {
+                "body": "Hello @TempUser!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Temp User"
+                    }
+                ]
+            }
+            """.formatted(tempUserId);
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mentions", hasSize(1)))
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
+
+        // User leaves the family
+        familyStore.removeMember(FAMILY_ID, tempUserId);
+
+        // Update comment body ONLY - omit mentions field entirely
+        String updateBody = """
+            {
+                "body": "Updated body without touching mentions",
+                "updated_at": "%s"
+            }
+            """.formatted(updatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Updated body without touching mentions"))
+                // Mentions should be preserved even though user left
+                .andExpect(jsonPath("$.mentions", hasSize(1)))
+                .andExpect(jsonPath("$.mentions[0].user_id").value(tempUserId.toString()))
+                .andExpect(jsonPath("$.mentions[0].display_name_snapshot").value("Temp User"))
+                .andExpect(jsonPath("$.mentions[0].status").value("left"));
+    }
+
+    // Test: explicit empty array [] clears all mentions (including historical left/removed)
+    @Test
+    void updateComment_explicitEmptyArray_clearsAllMentions() throws Exception {
+        UUID tempUserId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        familyStore.addMemberWithRole(FAMILY_ID, tempUserId, Role.EDITOR);
+
+        // Create comment with mention
+        String createBody = """
+            {
+                "body": "Hello @TempUser!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Temp User"
+                    }
+                ]
+            }
+            """.formatted(tempUserId);
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mentions", hasSize(1)))
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
+
+        // User leaves the family
+        familyStore.removeMember(FAMILY_ID, tempUserId);
+
+        // Update comment with explicit empty mentions array - should clear all
+        String updateBody = """
+            {
+                "body": "Updated body, clearing all mentions",
+                "mentions": [],
+                "updated_at": "%s"
+            }
+            """.formatted(updatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Updated body, clearing all mentions"))
+                // All mentions should be cleared, including historical left user
+                .andExpect(jsonPath("$.mentions").doesNotExist());
+    }
+
+    // Test: non-empty list replaces only active members, preserves left members
+    @Test
+    void updateComment_nonEmptyList_preservesLeftMentions() throws Exception {
+        UUID leftUserId = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        familyStore.addMemberWithRole(FAMILY_ID, leftUserId, Role.EDITOR);
+
+        // Create comment with two mentions: one who will leave, one who stays
+        String createBody = """
+            {
+                "body": "Hello @TempUser and @Editor!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Will Leave User"
+                    },
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Editor User"
+                    }
+                ]
+            }
+            """.formatted(leftUserId, EDITOR_USER_ID);
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mentions", hasSize(2)))
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
+
+        // User leaves the family
+        familyStore.removeMember(FAMILY_ID, leftUserId);
+
+        // Update comment - replace Editor mention with Admin, but left user should be preserved
+        String updateBody = """
+            {
+                "body": "Updated mentions: only Admin now",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Admin User"
+                    }
+                ],
+                "updated_at": "%s"
+            }
+            """.formatted(ADMIN_USER_ID, updatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("Updated mentions: only Admin now"))
+                // Should have 2 mentions: Admin (new active) + leftUser (preserved historical)
+                .andExpect(jsonPath("$.mentions", hasSize(2)))
+                .andExpect(jsonPath("$.mentions[?(@.status=='left')]", hasSize(1)))
+                .andExpect(jsonPath("$.mentions[?(@.status=='active')]", hasSize(1)))
+                .andExpect(jsonPath("$.mentions[?(@.user_id=='%s')].status".formatted(leftUserId), hasItem("left")))
+                .andExpect(jsonPath("$.mentions[?(@.user_id=='%s')].status".formatted(ADMIN_USER_ID), hasItem("active")));
+    }
+
+    // Test: submitting left/removed user_id in update body still returns 400
+    @Test
+    void updateComment_leftUserIdInBody_returns400() throws Exception {
+        UUID leftUserId = UUID.fromString("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+        familyStore.addMemberWithRole(FAMILY_ID, leftUserId, Role.EDITOR);
+
+        // Create comment without mention
+        String createBody = """
+            {
+                "body": "Original comment"
+            }
+            """;
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
+
+        // User leaves the family
+        familyStore.removeMember(FAMILY_ID, leftUserId);
+
+        // Try to add mention for user who left - should return 400
+        String updateBody = """
+            {
+                "body": "Trying to mention left user",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Left User"
+                    }
+                ],
+                "updated_at": "%s"
+            }
+            """.formatted(leftUserId, updatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("mentioned user is not a current family member"));
+    }
+
+    // Test: update existing comment, preserving left mention while adding new active mention
+    @Test
+    void updateComment_addActiveMention_preservesLeftMention() throws Exception {
+        UUID leftUserId = UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff");
+        familyStore.addMemberWithRole(FAMILY_ID, leftUserId, Role.EDITOR);
+
+        // Create comment with mention of user who will leave
+        String createBody = """
+            {
+                "body": "Hello @LeftUser!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Left User"
+                    }
+                ]
+            }
+            """.formatted(leftUserId);
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments")
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mentions", hasSize(1)))
+                .andReturn().getResponse().getContentAsString();
+
+        String commentId = mapper.readTree(result).get("id").asText();
+        String updatedAt = mapper.readTree(result).get("updated_at").asText();
+
+        // User leaves
+        familyStore.removeMember(FAMILY_ID, leftUserId);
+
+        // Update: add Editor mention (active), left user should be preserved
+        String updateBody = """
+            {
+                "body": "Hello @LeftUser and @Editor!",
+                "mentions": [
+                    {
+                        "user_id": "%s",
+                        "display_name_snapshot": "Editor User"
+                    }
+                ],
+                "updated_at": "%s"
+            }
+            """.formatted(EDITOR_USER_ID, updatedAt);
+
+        mockMvc.perform(put("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId + "/comments/" + commentId)
+                        .header(AUTH_HEADER, bearerToken(ADMIN_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentions", hasSize(2)))
+                .andExpect(jsonPath("$.mentions[?(@.user_id=='%s')].status".formatted(leftUserId), hasItem("left")))
+                .andExpect(jsonPath("$.mentions[?(@.user_id=='%s')].status".formatted(EDITOR_USER_ID), hasItem("active")));
+    }
+
+    // ====================
     // END MENTIONS TESTS
     // ====================
 

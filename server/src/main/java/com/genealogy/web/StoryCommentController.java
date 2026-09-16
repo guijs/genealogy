@@ -2,6 +2,7 @@ package com.genealogy.web;
 
 import com.genealogy.domain.family.Membership;
 import com.genealogy.domain.story.StoryComment;
+import com.genealogy.service.MentionUpdateAction;
 import com.genealogy.service.StoryCommentService;
 import com.genealogy.web.dto.*;
 import com.genealogy.web.filter.FamilyMembershipFilter;
@@ -168,9 +169,9 @@ public class StoryCommentController {
             return ResponseEntity.badRequest().body(new ErrorResponse("invalid updated_at format, expected ISO-8601"));
         }
 
-        List<StoryCommentService.MentionInput> mentions;
+        MentionUpdateAction mentionAction;
         try {
-            mentions = parseMentions(body.getMentions());
+            mentionAction = parseMentionUpdateAction(body.getMentions());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
@@ -182,7 +183,7 @@ public class StoryCommentController {
                     commentUUID,
                     membership.getUserId(),
                     body.getBody(),
-                    mentions,
+                    mentionAction,
                     expectedUpdatedAt,
                     membership.getRole()
             );
@@ -263,5 +264,38 @@ public class StoryCommentController {
                     return new StoryCommentService.MentionInput(userId, m.getDisplayNameSnapshot());
                 })
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Parse mention update action for PUT update comment.
+     * Distinguishes between:
+     * - null (omit): do not touch existing mentions
+     * - empty list []: clear all mentions
+     * - non-empty list: replace active/current-member mentions only
+     */
+    private MentionUpdateAction parseMentionUpdateAction(List<MentionRequest> mentionRequests) {
+        if (mentionRequests == null) {
+            return new MentionUpdateAction.Omit();
+        }
+
+        if (mentionRequests.isEmpty()) {
+            return new MentionUpdateAction.ClearAll();
+        }
+
+        List<MentionUpdateAction.Replace.MentionInput> mentions = mentionRequests.stream()
+                .map(m -> {
+                    UUID userId = null;
+                    if (m.getUserId() != null && !m.getUserId().isBlank()) {
+                        try {
+                            userId = UUID.fromString(m.getUserId());
+                        } catch (IllegalArgumentException e) {
+                            throw new IllegalArgumentException("invalid user_id format");
+                        }
+                    }
+                    return new MentionUpdateAction.Replace.MentionInput(userId, m.getDisplayNameSnapshot());
+                })
+                .collect(Collectors.toList());
+
+        return new MentionUpdateAction.Replace(mentions);
     }
 }
