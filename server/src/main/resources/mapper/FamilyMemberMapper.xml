@@ -38,11 +38,13 @@
             <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
             <arg column="name" javaType="java.lang.String"/>
             <arg column="progenitor_person_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="generation_names" javaType="java.util.List" typeHandler="com.genealogy.config.MyBatisConfig$StringArrayTypeHandler"/>
+            <arg column="generation_name_align" javaType="java.lang.String"/>
         </constructor>
     </resultMap>
 
     <select id="findFamiliesByUserId" resultMap="familyResultMap">
-        SELECT f.id, f.name, f.progenitor_person_id
+        SELECT f.id, f.name, f.progenitor_person_id, f.generation_names, f.generation_name_align
         FROM families f
         INNER JOIN family_members fm ON f.id = fm.family_id
         WHERE fm.user_id = #{userId}

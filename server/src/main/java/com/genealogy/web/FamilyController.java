@@ -58,7 +58,12 @@ public class FamilyController {
 
         Family fam = family.get();
         String progenitorId = fam.getProgenitorPersonId() != null ? fam.getProgenitorPersonId().toString() : null;
-        return ResponseEntity.ok(new FamilyResponse(fam.getId().toString(), fam.getName(), progenitorId));
+        return ResponseEntity.ok(new FamilyResponse(
+                fam.getId().toString(), 
+                fam.getName(), 
+                progenitorId,
+                fam.getGenerationNames(),
+                fam.getGenerationNameAlign()));
     }
 
     @GetMapping("/persons")

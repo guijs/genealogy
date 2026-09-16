@@ -73,6 +73,10 @@ public class FamilyStore {
         familyMapper.updateProgenitor(familyId, progenitorPersonId);
     }
 
+    public void updateGenerationNames(UUID familyId, List<String> generationNames, String generationNameAlign) {
+        familyMapper.updateGenerationNames(familyId, generationNames, generationNameAlign);
+    }
+
     public void clear() {
         familyMemberMapper.deleteAll();
         familyMapper.deleteAll();

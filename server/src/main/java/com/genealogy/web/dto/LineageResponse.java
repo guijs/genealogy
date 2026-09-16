@@ -13,10 +13,18 @@ public class LineageResponse {
     
     private final List<LineageGenerationDTO> generations;
 
+    @JsonProperty("generation_name_align")
+    private final String generationNameAlign;
+
     public LineageResponse(String familyId, String progenitorPersonId, List<LineageGenerationDTO> generations) {
+        this(familyId, progenitorPersonId, generations, "A");
+    }
+
+    public LineageResponse(String familyId, String progenitorPersonId, List<LineageGenerationDTO> generations, String generationNameAlign) {
         this.familyId = familyId;
         this.progenitorPersonId = progenitorPersonId;
         this.generations = generations;
+        this.generationNameAlign = generationNameAlign;
     }
 
     public String getFamilyId() {
@@ -29,5 +37,9 @@ public class LineageResponse {
 
     public List<LineageGenerationDTO> getGenerations() {
         return generations;
+    }
+
+    public String getGenerationNameAlign() {
+        return generationNameAlign;
     }
 }
