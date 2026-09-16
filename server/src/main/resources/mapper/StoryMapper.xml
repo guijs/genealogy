@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.genealogy.mapper.StoryMapper">
+
+    <resultMap id="storyRowResultMap" type="com.genealogy.mapper.StoryMapper$StoryRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="family_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="title" javaType="java.lang.String"/>
+            <arg column="body" javaType="java.lang.String"/>
+            <arg column="narrative_time" javaType="java.time.LocalDate"/>
+            <arg column="created_by" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="updated_by" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+            <arg column="updated_at" javaType="java.time.Instant"/>
+            <arg column="version" javaType="java.lang.Integer"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insertStory">
+        INSERT INTO stories (id, family_id, title, body, narrative_time, created_by, updated_by, version)
+        VALUES (#{id}, #{familyId}, #{title}, #{body}, #{narrativeTime}, #{createdBy}, #{updatedBy}, 1)
+    </insert>
+
+    <insert id="insertStoryPerson">
+        INSERT INTO story_persons (story_id, person_id)
+        VALUES (#{storyId}, #{personId})
+    </insert>
+
+    <delete id="deleteStoryPersons">
+        DELETE FROM story_persons WHERE story_id = #{storyId}
+    </delete>
+
+    <update id="updateStory">
+        UPDATE stories
+        SET title = #{title},
+            body = #{body},
+            narrative_time = #{narrativeTime},
+            updated_by = #{updatedBy},
+            updated_at = CURRENT_TIMESTAMP,
+            version = #{version}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findById" resultMap="storyRowResultMap">
+        SELECT id, family_id, title, body, narrative_time, created_by, updated_by, created_at, updated_at, version
+        FROM stories WHERE id = #{id}
+    </select>
+
+    <select id="findByIdAndFamilyId" resultMap="storyRowResultMap">
+        SELECT id, family_id, title, body, narrative_time, created_by, updated_by, created_at, updated_at, version
+        FROM stories WHERE id = #{id} AND family_id = #{familyId}
+    </select>
+
+    <select id="findByFamilyId" resultMap="storyRowResultMap">
+        SELECT id, family_id, title, body, narrative_time, created_by, updated_by, created_at, updated_at, version
+        FROM stories WHERE family_id = #{familyId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findByFamilyIdAndPersonId" resultMap="storyRowResultMap">
+        SELECT s.id, s.family_id, s.title, s.body, s.narrative_time, s.created_by, s.updated_by, s.created_at, s.updated_at, s.version
+        FROM stories s
+        INNER JOIN story_persons sp ON s.id = sp.story_id
+        WHERE s.family_id = #{familyId} AND sp.person_id = #{personId}
+        ORDER BY s.created_at DESC
+    </select>
+
+    <select id="findPersonIdsByStoryId" resultType="java.util.UUID">
+        SELECT person_id FROM story_persons WHERE story_id = #{storyId}
+    </select>
+
+    <delete id="deleteById">
+        DELETE FROM stories WHERE id = #{id}
+    </delete>
+
+    <delete id="deleteAll">
+        DELETE FROM stories
+    </delete>
+
+</mapper>
