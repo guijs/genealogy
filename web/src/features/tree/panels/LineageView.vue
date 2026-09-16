@@ -57,6 +57,15 @@ const availablePersons = computed(() => {
   return persons.value.filter((p) => p.id !== lineage.value?.progenitor_person_id)
 })
 
+const anyModalOpen = computed(() => {
+  return (
+    progenitorPickerOpen.value ||
+    changeConfirmOpen.value ||
+    clearConfirmOpen.value ||
+    generationNamesEditorOpen.value
+  )
+})
+
 async function loadLineage() {
   if (!currentFamilyId.value) {
     loadError.value = '未选择家族'
@@ -374,6 +383,12 @@ defineExpose({ reload: loadLineage })
         >
           编辑字辈
         </button>
+      </div>
+
+      <!-- Action error alert (visible when no modal is open) -->
+      <div v-if="actionError && !anyModalOpen" class="action-error-alert" role="alert">
+        {{ actionError }}
+        <button type="button" class="alert-dismiss" @click="actionError = null" aria-label="关闭">×</button>
       </div>
 
       <div class="lineage-layers">
@@ -823,6 +838,37 @@ defineExpose({ reload: loadLineage })
 .admin-bar-sep {
   color: #ccc;
   margin: 0 4px;
+}
+
+/* Action error alert on main view */
+.action-error-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fef0f0;
+  border: 1px solid #f5c6cb;
+  border-radius: 8px;
+  color: #c53030;
+  font-size: 14px;
+}
+.alert-dismiss {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #c53030;
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.alert-dismiss:hover {
+  background: rgba(197, 48, 48, 0.1);
 }
 
 /* Lineage layers */
