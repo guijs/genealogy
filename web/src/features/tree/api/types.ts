@@ -295,3 +295,47 @@ export interface GenerationNamesResponse {
   generation_names: string[] | null
   generation_name_align: GenerationNameAlign
 }
+
+/**
+ * Story API types (PR#49, PR#50)
+ *
+ * Stories are family-scoped narratives that can optionally be linked to specific persons.
+ * Uses snake_case JSON, Bearer auth.
+ */
+
+export interface StoryResponse {
+  id: string
+  family_id: string
+  title: string | null
+  body: string
+  person_ids: string[]
+  narrative_time: string | null
+  created_by: string
+  updated_by: string
+  created_at: string
+  updated_at: string
+  version: number
+}
+
+export interface CreateStoryRequest {
+  title?: string | null
+  body: string
+  narrative_time?: string | null
+  person_ids?: string[]
+}
+
+export interface UpdateStoryRequest {
+  title?: string | null
+  body?: string
+  narrative_time?: string | null
+  person_ids?: string[]
+  version: number
+}
+
+export interface DeleteStoryRequest {
+  version: number
+}
+
+export interface StoriesListResponse {
+  stories: StoryResponse[]
+}

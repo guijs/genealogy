@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { SIBLING_KIND_LABEL } from '../layout/unionLayout'
 import { useTreeViewStore } from '../state/treeViewStore'
+import { listStories, formatNarrativeTime, StoryApiError } from '../api/storyClient'
+import { listMembers, type FamilyMember, MemberApiError } from '../api/memberClient'
+import { getCurrentUserId } from '../api/auth'
+import type { StoryResponse } from '../api/types'
 
+const router = useRouter()
 const store = useTreeViewStore()
 const {
   drawerOpen,
@@ -14,7 +20,21 @@ const {
   editMode,
   submitting,
   selectedPersonHidden,
+  currentFamilyId,
 } = storeToRefs(store)
+
+const personStories = ref<StoryResponse[]>([])
+const storiesLoading = ref(false)
+const storiesError = ref('')
+const members = ref<FamilyMember[]>([])
+
+const currentUserId = computed(() => getCurrentUserId() ?? '')
+
+const isAdminOrEditor = computed(() => {
+  if (!currentUserId.value) return false
+  const currentMember = members.value.find((m) => m.user_id === currentUserId.value)
+  return currentMember?.role === 'admin' || currentMember?.role === 'editor'
+})
 
 const editFirstName = ref('')
 const editLastName = ref('')
@@ -112,6 +132,86 @@ async function handleDissolveChild(row: {
     row.subtype,
     row.role,
   )
+}
+
+async function loadPersonStories() {
+  if (!currentFamilyId.value || !selectedPerson.value || !usingGraphApi.value) {
+    personStories.value = []
+    return
+  }
+
+  storiesLoading.value = true
+  storiesError.value = ''
+
+  try {
+    const result = await listStories({
+      familyId: currentFamilyId.value,
+      personId: selectedPerson.value.id,
+    })
+    personStories.value = result.stories
+  } catch (e) {
+    if (e instanceof StoryApiError) {
+      storiesError.value = e.message
+    } else {
+      storiesError.value = '加载故事失败'
+    }
+    personStories.value = []
+  } finally {
+    storiesLoading.value = false
+  }
+}
+
+async function loadMembers() {
+  if (!currentFamilyId.value || !usingGraphApi.value) return
+
+  try {
+    const result = await listMembers(currentFamilyId.value)
+    members.value = result.members
+  } catch (e) {
+    if (e instanceof MemberApiError) {
+      console.warn('Failed to load members:', e.message)
+    }
+  }
+}
+
+function goToStoriesPage() {
+  if (currentFamilyId.value) {
+    router.push({ name: 'stories', query: { familyId: currentFamilyId.value } })
+  }
+}
+
+function goToStoriesPageWithCreate() {
+  if (currentFamilyId.value) {
+    router.push({
+      name: 'stories',
+      query: {
+        familyId: currentFamilyId.value,
+        preSelectPerson: selectedPerson.value?.id,
+      },
+    })
+  }
+}
+
+watch(
+  () => [selectedPerson.value?.id, drawerOpen.value, usingGraphApi.value] as const,
+  async ([personId, isOpen, isRealApi]) => {
+    if (personId && isOpen && isRealApi) {
+      await Promise.all([loadPersonStories(), loadMembers()])
+    } else {
+      personStories.value = []
+    }
+  },
+  { immediate: true },
+)
+
+function formatStoryDate(dateStr: string): string {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 </script>
 
@@ -302,6 +402,48 @@ async function handleDissolveChild(row: {
           <span v-else class="kin-name fallback">{{ sib.siblingId }}</span>
         </li>
       </ul>
+    </section>
+
+    <!-- 故事 -->
+    <section v-if="usingGraphApi && !editMode" class="section">
+      <div class="section-header">
+        <h3 class="section-title">故事</h3>
+        <button
+          v-if="isAdminOrEditor"
+          type="button"
+          class="btn-action"
+          @click="goToStoriesPageWithCreate"
+        >
+          添加故事
+        </button>
+      </div>
+      <div v-if="storiesLoading" class="stories-loading">加载中…</div>
+      <div v-else-if="storiesError" class="stories-error">{{ storiesError }}</div>
+      <div v-else-if="personStories.length === 0" class="stories-empty">暂无相关故事</div>
+      <ul v-else class="stories-list">
+        <li
+          v-for="story in personStories"
+          :key="story.id"
+          class="story-item"
+          @click="goToStoriesPage"
+        >
+          <div class="story-title">{{ story.title || '无标题' }}</div>
+          <div class="story-meta">
+            <span v-if="story.narrative_time" class="story-time">
+              {{ formatNarrativeTime(story.narrative_time) }}
+            </span>
+            <span class="story-date">{{ formatStoryDate(story.updated_at) }}</span>
+          </div>
+        </li>
+      </ul>
+      <button
+        v-if="personStories.length > 0"
+        type="button"
+        class="btn-view-all"
+        @click="goToStoriesPage"
+      >
+        查看全部故事 →
+      </button>
     </section>
 
     <!-- 隐藏/恢复操作 -->
@@ -660,5 +802,65 @@ async function handleDissolveChild(row: {
   font-size: 12px;
   color: #888;
   text-align: center;
+}
+/* 故事样式 */
+.stories-loading,
+.stories-error,
+.stories-empty {
+  font-size: 13px;
+  color: #888;
+  padding: 8px 0;
+}
+.stories-error {
+  color: #c53030;
+}
+.stories-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.story-item {
+  padding: 10px 12px;
+  background: #faf9f7;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.story-item:hover {
+  background: #f0eeeb;
+}
+.story-item:last-child {
+  margin-bottom: 0;
+}
+.story-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+}
+.story-meta {
+  font-size: 12px;
+  color: #888;
+  display: flex;
+  gap: 8px;
+}
+.story-time {
+  color: var(--color-accent, #2f5d50);
+}
+.btn-view-all {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-accent, #2f5d50);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
+}
+.btn-view-all:hover {
+  text-decoration: underline;
 }
 </style>
