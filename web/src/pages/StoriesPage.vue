@@ -98,9 +98,23 @@ function formatDate(dateStr: string): string {
   })
 }
 
+async function consumePreSelectPerson() {
+  const preSelectPerson = route.query.preSelectPerson as string | undefined
+  if (preSelectPerson && familyId.value && isAdminOrEditor.value) {
+    openCreateForm(preSelectPerson)
+    router.replace({
+      query: {
+        ...route.query,
+        preSelectPerson: undefined,
+      },
+    })
+  }
+}
+
 onMounted(async () => {
   if (familyId.value && usingGraphApi.value) {
     await Promise.all([loadStories(), loadMembers(), loadPersons()])
+    await consumePreSelectPerson()
   }
 })
 
@@ -114,16 +128,28 @@ watch(
   },
 )
 
+watch(
+  () => route.query.preSelectPerson,
+  async (newPreSelect) => {
+    if (newPreSelect && familyId.value && usingGraphApi.value && members.value.length > 0) {
+      await consumePreSelectPerson()
+    }
+  },
+)
+
 async function loadStories() {
   if (!familyId.value) return
 
   loading.value = true
   loadError.value = ''
+  stories.value = []
+  selectedStory.value = null
 
   try {
     const result = await listStories({ familyId: familyId.value })
     stories.value = result.stories
   } catch (err) {
+    stories.value = []
     if (err instanceof StoryApiError) {
       loadError.value = err.message
     } else {
@@ -164,11 +190,11 @@ function openDetail(story: StoryResponse) {
   actionError.value = ''
 }
 
-function openCreateForm() {
+function openCreateForm(preSelectPersonId?: string) {
   formTitle.value = ''
   formBody.value = ''
   formNarrativeTime.value = ''
-  formPersonIds.value = []
+  formPersonIds.value = preSelectPersonId ? [preSelectPersonId] : []
   formVersion.value = 0
   viewMode.value = 'create'
   actionError.value = ''
@@ -288,22 +314,22 @@ function closeDeleteConfirm() {
 async function handleDelete() {
   if (!familyId.value || !storyToDelete.value) return
 
+  const deletingStoryId = storyToDelete.value.id
+  const deletingStoryVersion = storyToDelete.value.version
+  const wasSelectedStory = selectedStory.value?.id === deletingStoryId
+
   submitting.value = true
   actionError.value = ''
   successMessage.value = ''
 
   try {
-    await deleteStory(
-      familyId.value,
-      storyToDelete.value.id,
-      storyToDelete.value.version,
-    )
-    stories.value = stories.value.filter((s) => s.id !== storyToDelete.value!.id)
-    closeDeleteConfirm()
-    if (selectedStory.value?.id === storyToDelete.value.id) {
-      viewMode.value = 'list'
+    await deleteStory(familyId.value, deletingStoryId, deletingStoryVersion)
+    stories.value = stories.value.filter((s) => s.id !== deletingStoryId)
+    if (wasSelectedStory) {
       selectedStory.value = null
+      viewMode.value = 'list'
     }
+    closeDeleteConfirm()
     successMessage.value = '故事已删除'
     setTimeout(() => { successMessage.value = '' }, 3000)
   } catch (err) {
@@ -401,7 +427,7 @@ function goToTree() {
               v-if="isAdminOrEditor && usingGraphApi"
               type="button"
               class="btn-primary-sm"
-              @click="openCreateForm"
+              @click="openCreateForm()"
             >
               新建故事
             </button>
