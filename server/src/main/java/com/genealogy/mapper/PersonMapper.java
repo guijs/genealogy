@@ -44,5 +44,7 @@ public interface PersonMapper {
     
     ProjectionPerson findEarliestNonHiddenByFamilyId(@Param("familyId") UUID familyId);
     
+    void deleteById(@Param("id") UUID id);
+    
     void deleteAll();
 }

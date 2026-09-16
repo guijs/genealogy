@@ -4,6 +4,7 @@ import com.genealogy.domain.family.Role;
 import com.genealogy.domain.person.Person;
 import com.genealogy.domain.projection.Gender;
 import com.genealogy.domain.projection.ProjectionPerson;
+import com.genealogy.mapper.PersonMapper;
 import com.genealogy.store.FamilyStore;
 import com.genealogy.store.PersonStore;
 import com.genealogy.store.ProjectionStore;
@@ -36,6 +37,9 @@ class StoryControllerTest extends BaseIntegrationTest {
 
     @Autowired
     private StoryStore storyStore;
+
+    @Autowired
+    private PersonMapper personMapper;
 
     private static final UUID FAMILY_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID ADMIN_USER_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
@@ -784,5 +788,79 @@ class StoryControllerTest extends BaseIntegrationTest {
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.body").value(maxBody));
+    }
+
+    @Test
+    void personHardDelete_unbindsFromStory_becomesFamilyScoped() throws Exception {
+        UUID tempPersonId = UUID.randomUUID();
+        personStore.addPerson(new Person(tempPersonId, FAMILY_ID, "Temp", "Person"));
+        projectionStore.createPerson(new ProjectionPerson(
+                tempPersonId, FAMILY_ID, "Temp Person", Gender.MALE, 1990, null, false));
+
+        String createBody = """
+            {
+                "title": "Story about temp person",
+                "body": "This story is linked to a person who will be deleted",
+                "person_ids": ["%s"]
+            }
+            """.formatted(tempPersonId);
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.person_ids", hasSize(1)))
+                .andExpect(jsonPath("$.person_ids[0]").value(tempPersonId.toString()))
+                .andReturn().getResponse().getContentAsString();
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        String storyId = mapper.readTree(result).get("id").asText();
+
+        personMapper.deleteById(tempPersonId);
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId)
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(storyId))
+                .andExpect(jsonPath("$.title").value("Story about temp person"))
+                .andExpect(jsonPath("$.body").value("This story is linked to a person who will be deleted"))
+                .andExpect(jsonPath("$.person_ids", hasSize(0)));
+    }
+
+    @Test
+    void personHardDelete_multiplePersons_unbindsOnlyDeleted() throws Exception {
+        UUID tempPersonId = UUID.randomUUID();
+        personStore.addPerson(new Person(tempPersonId, FAMILY_ID, "Temp", "Person"));
+        projectionStore.createPerson(new ProjectionPerson(
+                tempPersonId, FAMILY_ID, "Temp Person", Gender.MALE, 1990, null, false));
+
+        String createBody = """
+            {
+                "title": "Story about two people",
+                "body": "One person will be deleted",
+                "person_ids": ["%s", "%s"]
+            }
+            """.formatted(PERSON_ID_1, tempPersonId);
+
+        String result = mockMvc.perform(post("/api/v1/families/" + FAMILY_ID + "/stories")
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.person_ids", hasSize(2)))
+                .andReturn().getResponse().getContentAsString();
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        String storyId = mapper.readTree(result).get("id").asText();
+
+        personMapper.deleteById(tempPersonId);
+
+        mockMvc.perform(get("/api/v1/families/" + FAMILY_ID + "/stories/" + storyId)
+                        .header(AUTH_HEADER, bearerToken(EDITOR_USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(storyId))
+                .andExpect(jsonPath("$.person_ids", hasSize(1)))
+                .andExpect(jsonPath("$.person_ids[0]").value(PERSON_ID_1.toString()));
     }
 }

@@ -75,6 +75,10 @@
         LIMIT 1
     </select>
 
+    <delete id="deleteById">
+        DELETE FROM persons WHERE id = #{id}
+    </delete>
+
     <delete id="deleteAll">
         DELETE FROM persons
     </delete>
