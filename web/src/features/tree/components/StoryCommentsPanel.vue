@@ -71,6 +71,7 @@ const editPersonRefs = ref<PersonRefRequest[]>([])
 const editPersonRefsOriginal = ref<PersonRefRequest[]>([])
 const showPersonRefDropdown = ref(false)
 const personRefDropdownMode = ref<'new' | 'edit'>('new')
+const personRefTriggerMode = ref<'hash' | 'picker'>('hash')
 const personRefFilterText = ref('')
 const personRefDropdownPosition = ref({ top: 0, left: 0 })
 
@@ -176,6 +177,7 @@ function handleTextareaInput(event: Event, mode: 'new' | 'edit') {
   } else if (hashMatch) {
     personRefFilterText.value = hashMatch[1]
     personRefDropdownMode.value = mode
+    personRefTriggerMode.value = 'hash'
     showPersonRefDropdown.value = true
     showMentionDropdown.value = false
 
@@ -214,7 +216,11 @@ function handleTextareaKeydown(event: KeyboardEvent) {
     } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
     } else if (event.key === 'Enter' && filteredPersonRefCandidates.value.length > 0) {
-      selectPersonRef(filteredPersonRefCandidates.value[0])
+      if (personRefTriggerMode.value === 'picker') {
+        addPersonRefFromPicker(filteredPersonRefCandidates.value[0], personRefDropdownMode.value)
+      } else {
+        selectPersonRef(filteredPersonRefCandidates.value[0])
+      }
       event.preventDefault()
     }
   }
@@ -343,6 +349,7 @@ function selectPersonRef(candidate: PersonRefCandidate) {
 
 function openPersonRefPicker(mode: 'new' | 'edit') {
   personRefDropdownMode.value = mode
+  personRefTriggerMode.value = 'picker'
   showPersonRefDropdown.value = true
   personRefFilterText.value = ''
   showMentionDropdown.value = false
@@ -1003,7 +1010,7 @@ defineExpose({
           :key="candidate.person_id"
           class="person-ref-dropdown-item"
           :class="{ 'candidate-deceased': candidate.deceased }"
-          @click="addPersonRefFromPicker(candidate, personRefDropdownMode)"
+          @click="personRefTriggerMode === 'picker' ? addPersonRefFromPicker(candidate, personRefDropdownMode) : selectPersonRef(candidate)"
         >
           {{ candidate.display_name }}
           <span v-if="candidate.deceased" class="deceased-badge">已故</span>
