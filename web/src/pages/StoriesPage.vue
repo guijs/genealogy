@@ -107,14 +107,20 @@ function formatDate(dateStr: string): string {
 
 async function consumePreSelectPerson() {
   const preSelectPerson = route.query.preSelectPerson as string | undefined
-  if (preSelectPerson && familyId.value && isAdminOrEditor.value) {
+  if (!preSelectPerson || !familyId.value) return
+
+  router.replace({
+    query: {
+      ...route.query,
+      preSelectPerson: undefined,
+    },
+  })
+
+  if (!isAdminOrEditor.value) return
+
+  const personExistsInFamily = persons.value.some((p) => p.id === preSelectPerson)
+  if (personExistsInFamily) {
     openCreateForm(preSelectPerson)
-    router.replace({
-      query: {
-        ...route.query,
-        preSelectPerson: undefined,
-      },
-    })
   }
 }
 
