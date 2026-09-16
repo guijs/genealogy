@@ -184,7 +184,7 @@ describe('StoryCommentsPanel', () => {
   })
 
   describe('mention display', () => {
-    it('displays active mentions with highlight styling', async () => {
+    it('displays active mentions as clickable buttons with highlight styling', async () => {
       const activeMention: MentionResponse = {
         user_id: 'user-mentioned',
         display_name_snapshot: '成员 user-men（编辑）',
@@ -210,10 +210,42 @@ describe('StoryCommentsPanel', () => {
 
       const mentionDisplay = wrapper.find('.mention-active')
       expect(mentionDisplay.exists()).toBe(true)
+      expect(mentionDisplay.element.tagName.toLowerCase()).toBe('button')
       expect(mentionDisplay.text()).toContain('@成员 user-men（编辑）')
     })
 
-    it('displays left/removed mentions with muted styling', async () => {
+    it('emits mentionClick event when active mention is clicked', async () => {
+      const activeMention: MentionResponse = {
+        user_id: 'user-mentioned',
+        display_name_snapshot: '成员 user-men（编辑）',
+        status: 'active',
+      }
+      const commentWithMention = mockComment({
+        mentions: [activeMention],
+      })
+      vi.mocked(listComments).mockResolvedValue({ comments: [commentWithMention] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-viewer',
+          members: [mockMember({ user_id: 'user-viewer', role: 'viewer' })],
+          isAdmin: false,
+          canWrite: false,
+        },
+      })
+
+      await flushPromises()
+
+      const mentionButton = wrapper.find('.mention-active')
+      await mentionButton.trigger('click')
+
+      expect(wrapper.emitted('mentionClick')).toBeTruthy()
+      expect(wrapper.emitted('mentionClick')![0]).toEqual(['user-mentioned'])
+    })
+
+    it('displays left/removed mentions as non-clickable spans with muted styling', async () => {
       const leftMention: MentionResponse = {
         user_id: null,
         display_name_snapshot: '成员 user-lef（已离开）',
@@ -244,6 +276,8 @@ describe('StoryCommentsPanel', () => {
 
       const inactiveMentions = wrapper.findAll('.mention-inactive')
       expect(inactiveMentions.length).toBe(2)
+      expect(inactiveMentions[0].element.tagName.toLowerCase()).toBe('span')
+      expect(inactiveMentions[1].element.tagName.toLowerCase()).toBe('span')
       expect(inactiveMentions[0].text()).toContain('@成员 user-lef（已离开）')
       expect(inactiveMentions[1].text()).toContain('@成员 user-rem（已移除）')
     })

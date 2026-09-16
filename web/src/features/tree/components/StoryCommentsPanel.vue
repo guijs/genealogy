@@ -22,6 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'error', message: string): void
+  (e: 'mentionClick', userId: string): void
 }>()
 
 const comments = ref<CommentResponse[]>([])
@@ -40,6 +41,8 @@ const deleting = ref(false)
 
 const newMentions = ref<MentionRequest[]>([])
 const editMentions = ref<MentionRequest[]>([])
+
+const clickedMentionKey = ref<string | null>(null)
 
 const showMentionDropdown = ref(false)
 const mentionDropdownMode = ref<'new' | 'edit'>('new')
@@ -200,6 +203,20 @@ function removeMention(userId: string, mode: 'new' | 'edit') {
 function closeMentionDropdown() {
   showMentionDropdown.value = false
   mentionFilterText.value = ''
+}
+
+function handleMentionClick(mention: MentionResponse, commentId: string, idx: number) {
+  if (mention.status !== 'active' || mention.user_id === null) return
+  
+  const key = `${commentId}-${idx}`
+  clickedMentionKey.value = key
+  emit('mentionClick', mention.user_id)
+  
+  setTimeout(() => {
+    if (clickedMentionKey.value === key) {
+      clickedMentionKey.value = null
+    }
+  }, 300)
 }
 
 function formatTime(dateStr: string): string {
@@ -477,17 +494,23 @@ defineExpose({
           </div>
           <div class="comment-body">{{ comment.body }}</div>
           <div v-if="comment.mentions && comment.mentions.length > 0" class="comment-mentions">
-            <span
-              v-for="(mention, idx) in comment.mentions"
-              :key="idx"
-              class="mention-display"
-              :class="{
-                'mention-active': mention.status === 'active' && mention.user_id !== null,
-                'mention-inactive': mention.status !== 'active' || mention.user_id === null
-              }"
-            >
-              @{{ mention.display_name_snapshot }}
-            </span>
+            <template v-for="(mention, idx) in comment.mentions" :key="idx">
+              <button
+                v-if="mention.status === 'active' && mention.user_id !== null"
+                type="button"
+                class="mention-display mention-active"
+                :class="{ 'mention-clicked': clickedMentionKey === `${comment.id}-${idx}` }"
+                @click="handleMentionClick(mention, comment.id, idx)"
+              >
+                @{{ mention.display_name_snapshot }}
+              </button>
+              <span
+                v-else
+                class="mention-display mention-inactive"
+              >
+                @{{ mention.display_name_snapshot }}
+              </span>
+            </template>
           </div>
           <div class="comment-actions">
             <button
@@ -913,12 +936,25 @@ defineExpose({
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 13px;
+  font-family: inherit;
 }
 
 .mention-active {
   background: #e8f0ed;
   color: var(--color-accent, #2f5d50);
-  cursor: default;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.mention-active:hover {
+  background: #d4e6df;
+  border-color: var(--color-accent, #2f5d50);
+}
+
+.mention-active:active,
+.mention-active.mention-clicked {
+  background: #c0dbd1;
 }
 
 .mention-inactive {
