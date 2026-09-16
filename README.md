@@ -1,108 +1,107 @@
-# Genealogy
+# Genealogy（家谱系统）
 
-Modern family genealogy software.
+现代家族谱系软件。
 
-## Stack
+## 技术栈
 
-- **Backend:** Spring Boot 3.x (JDK 17) — modular monolith under `server/`
-- **ORM:** MyBatis (no JPA/Hibernate)
-- **Migrations:** Flyway (no Liquibase)
-- **Database:** PostgreSQL 16
-- **Frontend:** Vue 3 + TypeScript + Vite under `web/`
+- **后端：** Spring Boot 3.x (JDK 17) — 模块化单体架构，位于 `server/`
+- **ORM：** MyBatis（不使用 JPA/Hibernate）
+- **数据库迁移：** Flyway（不使用 Liquibase）
+- **数据库：** PostgreSQL 16
+- **前端：** Vue 3 + TypeScript + Vite，位于 `web/`
 
-## Project Layout
+## 项目结构
 
 ```
 .
-├── server/               # Active Java backend (Spring Boot)
-│   ├── src/main/java/    # Application code
+├── server/               # 活跃的 Java 后端（Spring Boot）
+│   ├── src/main/java/    # 应用代码
 │   ├── src/main/resources/
 │   │   ├── application.yml
-│   │   └── db/migration/ # Flyway migrations
-│   └── pom.xml           # Maven build (strict dependency allowlist)
-├── web/                  # Vue 3 frontend (unchanged)
-├── legacy/go/            # Archived Go backend (read-only reference)
-├── docker-compose.yml    # PostgreSQL for local dev
+│   │   └── db/migration/ # Flyway 迁移脚本
+│   └── pom.xml           # Maven 构建（严格依赖白名单）
+├── web/                  # Vue 3 前端（未改动）
+├── legacy/go/            # 已归档的 Go 后端（仅供参考）
+├── docker-compose.yml    # 本地开发用 PostgreSQL
 └── README.md
 ```
 
-## Development
+## 开发指南
 
-### Prerequisites
+### 前置条件
 
 - JDK 17+
 - Maven 3.8+
-- Docker & Docker Compose (for PostgreSQL)
+- Docker & Docker Compose（用于 PostgreSQL）
 
-### Backend
+### 后端
 
 ```bash
-# Start PostgreSQL
+# 启动 PostgreSQL
 docker-compose up -d
 
-# Build and run
+# 构建并运行
 cd server
 ./mvnw spring-boot:run
 
-# Or build JAR
+# 或构建 JAR 包
 ./mvnw clean package
 java -jar target/genealogy-server-0.0.1-SNAPSHOT.jar
 
-# Run tests (no live PG required)
+# 运行测试（无需在线 PG）
 ./mvnw test
 ```
 
-### Health Check
+### 健康检查
 
 ```bash
 curl http://localhost:8080/healthz
 # {"status":"ok"}
 ```
 
-### Frontend
+### 前端
 
-See [web/README.md](web/README.md) for frontend development instructions.
+参见 [web/README.md](web/README.md) 了解前端开发说明。
 
-### Local Development Guide
+### 本地开发指南
 
-For a complete walkthrough on running the demo locally, see **[docs/LOCAL.md](docs/LOCAL.md)** — covers prerequisites, database setup, environment variables, and the register/login flow.
+完整的本地演示运行指南请参阅 **[docs/LOCAL.md](docs/LOCAL.md)** — 涵盖前置条件、数据库设置、环境变量及注册/登录流程。
 
-## Current Status
+## 当前状态
 
-### Implemented
-- ✅ Spring Boot scaffold with strict dependency allowlist
-- ✅ `GET /healthz` endpoint
-- ✅ Flyway migrations with schema (persons, families, relationships, unions, users, stories)
-- ✅ MyBatis data access layer
-- ✅ JWT authentication (`POST /api/v1/auth/register`, `POST /api/v1/auth/login`)
+### 已实现
+- ✅ Spring Boot 骨架（严格依赖白名单）
+- ✅ `GET /healthz` 健康检查端点
+- ✅ Flyway 迁移（schema 包含 persons、families、relationships、unions、users、stories）
+- ✅ MyBatis 数据访问层
+- ✅ JWT（JSON Web Token）认证（`POST /api/v1/auth/register`、`POST /api/v1/auth/login`）
 - ✅ Person/Family/Relationship/Union CRUD
-- ✅ Family graph query API
-- ✅ Local media upload
-- ✅ Family stories feature
-- ✅ Vue 3 frontend with mock data support
+- ✅ 家族图谱查询 API
+- ✅ 本地媒体上传
+- ✅ 家族故事功能
+- ✅ Vue 3 前端（支持 mock 数据）
 
-### Not Yet Implemented
-- ❌ SSO / OAuth third-party login
-- ❌ Pedigree print/export (PDF/image)
-- ❌ Historical point-in-time view (asOf)
-- ❌ Real-time collaborative editing
+### 尚未实现
+- ❌ SSO / OAuth 第三方登录
+- ❌ 族谱打印/导出（PDF/图片）
+- ❌ 历史时点视图（asOf）
+- ❌ 实时协作编辑
 
-## Design Decisions
+## 设计决策
 
-- **Java backend only** — Go code archived in `legacy/go/` for reference
-- **MyBatis over JPA** — explicit SQL, no ORM magic
-- **Flyway only** — simple versioned migrations
-- **No distributed stack** — no Spring Cloud, Gateway, Config Server, message brokers
-- **Modular monolith** — clean architecture without microservices complexity
+- **仅使用 Java 后端** — Go 代码已归档至 `legacy/go/` 供参考
+- **MyBatis 优于 JPA** — 显式 SQL，无 ORM 魔法
+- **仅使用 Flyway** — 简单的版本化迁移
+- **无分布式架构** — 不使用 Spring Cloud、Gateway、Config Server、消息中间件
+- **模块化单体** — 无微服务复杂性的清晰架构
 
-## Dependency Policy
+## 依赖策略
 
-See [server/DEPENDENCY_ALLOWLIST.md](server/DEPENDENCY_ALLOWLIST.md) for the strict
-dependency allowlist and denial rules.
+参见 [server/DEPENDENCY_ALLOWLIST.md](server/DEPENDENCY_ALLOWLIST.md) 了解严格的依赖白名单和拒绝规则。
 
-## Gates
+## 门禁
 
-Tests must pass before merge:
+合并前必须通过测试：
 ```bash
 cd server && ./mvnw test
 ```
