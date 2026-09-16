@@ -22,6 +22,7 @@ import {
   type PersonResponse,
 } from '../features/tree/api/personClient'
 import type { StoryResponse } from '../features/tree/api/types'
+import StoryCommentsPanel from '../features/tree/components/StoryCommentsPanel.vue'
 
 type ViewMode = 'list' | 'detail' | 'create' | 'edit'
 
@@ -58,6 +59,12 @@ const isAdminOrEditor = computed(() => {
   if (!currentUserId.value) return false
   const currentMember = members.value.find((m) => m.user_id === currentUserId.value)
   return currentMember?.role === 'admin' || currentMember?.role === 'editor'
+})
+
+const isAdmin = computed(() => {
+  if (!currentUserId.value) return false
+  const currentMember = members.value.find((m) => m.user_id === currentUserId.value)
+  return currentMember?.role === 'admin'
 })
 
 const canSubmit = computed(() => {
@@ -368,6 +375,10 @@ function goToTree() {
     router.push({ name: 'tree' })
   }
 }
+
+function handleCommentError(message: string) {
+  actionError.value = message
+}
 </script>
 
 <template>
@@ -515,6 +526,17 @@ function goToTree() {
           <div class="detail-body">
             <p class="body-text">{{ selectedStory.body }}</p>
           </div>
+
+          <StoryCommentsPanel
+            v-if="familyId && selectedStory"
+            :family-id="familyId"
+            :story-id="selectedStory.id"
+            :current-user-id="currentUserId"
+            :members="members"
+            :is-admin="isAdmin"
+            :can-write="isAdminOrEditor"
+            @error="handleCommentError"
+          />
         </div>
 
         <!-- Create/Edit Form -->

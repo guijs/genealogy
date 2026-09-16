@@ -339,3 +339,33 @@ export interface DeleteStoryRequest {
 export interface StoriesListResponse {
   stories: StoryResponse[]
 }
+
+/**
+ * Comment API types (PR#54)
+ *
+ * Flat comments on stories (no nested replies in v0.2).
+ * Uses snake_case JSON, Bearer auth.
+ * Optimistic concurrency via updated_at (ISO-8601 Instant).
+ */
+
+export interface CommentResponse {
+  id: string
+  story_id: string
+  author_user_id: string
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateCommentRequest {
+  body: string
+}
+
+export interface UpdateCommentRequest {
+  body: string
+  updated_at: string
+}
+
+export interface CommentsListResponse {
+  comments: CommentResponse[]
+}
