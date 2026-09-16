@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { isUsingGraphApi } from '../features/tree/api/graphClient'
 import { getCurrentUserId } from '../features/tree/api/auth'
@@ -21,7 +21,16 @@ import {
   listPersons,
   type PersonResponse,
 } from '../features/tree/api/personClient'
-import type { StoryResponse } from '../features/tree/api/types'
+import {
+  fetchPersonRefCandidates,
+  PersonRefApiError,
+} from '../features/tree/api/personRefClient'
+import type {
+  StoryResponse,
+  PersonRefRequest,
+  PersonRefResponse,
+  PersonRefCandidate,
+} from '../features/tree/api/types'
 import StoryCommentsPanel from '../features/tree/components/StoryCommentsPanel.vue'
 
 type ViewMode = 'list' | 'detail' | 'create' | 'edit'
@@ -47,6 +56,14 @@ const formBody = ref('')
 const formNarrativeTime = ref('')
 const formPersonIds = ref<string[]>([])
 const formVersion = ref(0)
+
+const personRefCandidates = ref<PersonRefCandidate[]>([])
+const formPersonRefs = ref<PersonRefRequest[]>([])
+const formPersonRefsOriginal = ref<PersonRefRequest[]>([])
+const showPersonRefDropdown = ref(false)
+const personRefFilterText = ref('')
+const personRefDropdownPosition = ref({ top: 0, left: 0 })
+const formBodyTextareaRef = ref<HTMLTextAreaElement | null>(null)
 
 const deleteConfirmOpen = ref(false)
 const storyToDelete = ref<StoryResponse | null>(null)
@@ -76,6 +93,15 @@ const canSubmit = computed(() => {
 
 const bodyCharCount = computed(() => formBody.value.length)
 const isBodyOverLimit = computed(() => formBody.value.length > STORY_BODY_MAX_LENGTH)
+
+const filteredPersonRefCandidates = computed(() => {
+  const filter = personRefFilterText.value.toLowerCase()
+  const selectedIds = new Set(formPersonRefs.value.map((r) => r.person_id))
+  return personRefCandidates.value.filter((c) => {
+    if (selectedIds.has(c.person_id)) return false
+    return c.display_name.toLowerCase().includes(filter)
+  })
+})
 
 function getPersonName(personId: string): string {
   const person = persons.value.find((p) => p.id === personId)
@@ -126,7 +152,7 @@ async function consumePreSelectPerson() {
 
 onMounted(async () => {
   if (familyId.value && usingGraphApi.value) {
-    await Promise.all([loadStories(), loadMembers(), loadPersons()])
+    await Promise.all([loadStories(), loadMembers(), loadPersons(), loadPersonRefCandidates()])
     await consumePreSelectPerson()
   }
 })
@@ -136,7 +162,7 @@ watch(
   async (newFamilyId, oldFamilyId) => {
     if (newFamilyId !== oldFamilyId && newFamilyId && usingGraphApi.value) {
       viewMode.value = 'list'
-      await Promise.all([loadStories(), loadMembers(), loadPersons()])
+      await Promise.all([loadStories(), loadMembers(), loadPersons(), loadPersonRefCandidates()])
     }
   },
 )
@@ -197,6 +223,21 @@ async function loadPersons() {
   }
 }
 
+async function loadPersonRefCandidates() {
+  if (!familyId.value || !usingGraphApi.value) return
+
+  try {
+    const result = await fetchPersonRefCandidates(familyId.value)
+    personRefCandidates.value = result.candidates
+  } catch (e) {
+    if (e instanceof PersonRefApiError) {
+      console.warn('Failed to load person ref candidates:', e.message)
+    } else {
+      console.warn('Failed to load person ref candidates:', e)
+    }
+  }
+}
+
 function openDetail(story: StoryResponse) {
   selectedStory.value = story
   viewMode.value = 'detail'
@@ -209,8 +250,11 @@ function openCreateForm(preSelectPersonId?: string) {
   formNarrativeTime.value = ''
   formPersonIds.value = preSelectPersonId ? [preSelectPersonId] : []
   formVersion.value = 0
+  formPersonRefs.value = []
+  formPersonRefsOriginal.value = []
   viewMode.value = 'create'
   actionError.value = ''
+  closePersonRefDropdown()
 }
 
 function openEditForm(story: StoryResponse) {
@@ -220,8 +264,17 @@ function openEditForm(story: StoryResponse) {
   formNarrativeTime.value = story.narrative_time || ''
   formPersonIds.value = [...story.person_ids]
   formVersion.value = story.version
+  const activeRefs = story.person_refs
+    ?.filter((r): r is PersonRefResponse & { person_id: string } => r.person_id !== null && r.clickable)
+    .map((r) => ({
+      person_id: r.person_id,
+      display_name_snapshot: r.display_name_snapshot,
+    })) ?? []
+  formPersonRefs.value = [...activeRefs]
+  formPersonRefsOriginal.value = [...activeRefs]
   viewMode.value = 'edit'
   actionError.value = ''
+  closePersonRefDropdown()
 }
 
 function goBackToList() {
@@ -243,16 +296,21 @@ async function handleCreate() {
   successMessage.value = ''
 
   try {
-    const newStory = await createStory(familyId.value, {
+    const createData: Parameters<typeof createStory>[1] = {
       title: formTitle.value.trim() || null,
       body: formBody.value.trim(),
       narrative_time: formNarrativeTime.value.trim() || null,
       person_ids: formPersonIds.value,
-    })
+    }
+    if (formPersonRefs.value.length > 0) {
+      createData.person_refs = formPersonRefs.value
+    }
+    const newStory = await createStory(familyId.value, createData)
     stories.value = [newStory, ...stories.value]
     selectedStory.value = newStory
     viewMode.value = 'detail'
     successMessage.value = '故事创建成功'
+    closePersonRefDropdown()
     setTimeout(() => { successMessage.value = '' }, 3000)
   } catch (err) {
     if (err instanceof StoryApiError) {
@@ -273,16 +331,21 @@ async function handleUpdate() {
   successMessage.value = ''
 
   try {
+    const personRefsChanged = havePersonRefsChanged()
+    const updateData: Parameters<typeof updateStory>[2] = {
+      title: formTitle.value.trim() || null,
+      body: formBody.value.trim(),
+      narrative_time: formNarrativeTime.value.trim() || null,
+      person_ids: formPersonIds.value,
+      version: formVersion.value,
+    }
+    if (personRefsChanged) {
+      updateData.person_refs = formPersonRefs.value
+    }
     const updatedStory = await updateStory(
       familyId.value,
       selectedStory.value.id,
-      {
-        title: formTitle.value.trim() || null,
-        body: formBody.value.trim(),
-        narrative_time: formNarrativeTime.value.trim() || null,
-        person_ids: formPersonIds.value,
-        version: formVersion.value,
-      },
+      updateData,
     )
     stories.value = stories.value.map((s) =>
       s.id === updatedStory.id ? updatedStory : s,
@@ -290,6 +353,7 @@ async function handleUpdate() {
     selectedStory.value = updatedStory
     viewMode.value = 'detail'
     successMessage.value = '故事更新成功'
+    closePersonRefDropdown()
     setTimeout(() => { successMessage.value = '' }, 3000)
   } catch (err) {
     if (err instanceof StoryApiError) {
@@ -299,6 +363,14 @@ async function handleUpdate() {
         formNarrativeTime.value = err.conflictStory.narrative_time || ''
         formPersonIds.value = [...err.conflictStory.person_ids]
         formVersion.value = err.conflictStory.version
+        const conflictRefs = err.conflictStory.person_refs
+          ?.filter((r): r is PersonRefResponse & { person_id: string } => r.person_id !== null && r.clickable)
+          .map((r) => ({
+            person_id: r.person_id,
+            display_name_snapshot: r.display_name_snapshot,
+          })) ?? []
+        formPersonRefs.value = [...conflictRefs]
+        formPersonRefsOriginal.value = [...conflictRefs]
         selectedStory.value = err.conflictStory
         stories.value = stories.value.map((s) =>
           s.id === err.conflictStory!.id ? err.conflictStory! : s,
@@ -371,6 +443,156 @@ function togglePersonId(personId: string) {
     formPersonIds.value.splice(idx, 1)
   } else {
     formPersonIds.value.push(personId)
+  }
+}
+
+function handleBodyInput(event: Event) {
+  const textarea = event.target as HTMLTextAreaElement
+  const value = textarea.value
+  const cursorPos = textarea.selectionStart
+
+  const textBeforeCursor = value.slice(0, cursorPos)
+  const hashMatch = textBeforeCursor.match(/#([^#@\s]*)$/)
+
+  if (hashMatch) {
+    personRefFilterText.value = hashMatch[1]
+    showPersonRefDropdown.value = true
+
+    const rect = textarea.getBoundingClientRect()
+    const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 20
+    const lines = textBeforeCursor.split('\n')
+    const currentLineIndex = lines.length - 1
+    
+    personRefDropdownPosition.value = {
+      top: rect.top + (currentLineIndex + 1) * lineHeight + 4,
+      left: rect.left + 12,
+    }
+  } else {
+    showPersonRefDropdown.value = false
+    personRefFilterText.value = ''
+  }
+}
+
+function handleBodyKeydown(event: KeyboardEvent) {
+  if (showPersonRefDropdown.value) {
+    if (event.key === 'Escape') {
+      showPersonRefDropdown.value = false
+      event.preventDefault()
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+    } else if (event.key === 'Enter' && filteredPersonRefCandidates.value.length > 0) {
+      selectPersonRef(filteredPersonRefCandidates.value[0])
+      event.preventDefault()
+    }
+  }
+}
+
+function selectPersonRef(candidate: PersonRefCandidate) {
+  const displayName = candidate.display_name
+  const refText = `#${displayName} `
+  const refReq: PersonRefRequest = {
+    person_id: candidate.person_id,
+    display_name_snapshot: displayName,
+  }
+
+  const textarea = formBodyTextareaRef.value
+  if (textarea) {
+    const value = formBody.value
+    const cursorPos = textarea.selectionStart
+    const textBeforeCursor = value.slice(0, cursorPos)
+    const hashIndex = textBeforeCursor.lastIndexOf('#')
+    if (hashIndex !== -1) {
+      formBody.value = value.slice(0, hashIndex) + refText + value.slice(cursorPos)
+      if (!formPersonRefs.value.some((r) => r.person_id === candidate.person_id)) {
+        formPersonRefs.value.push(refReq)
+      }
+      nextTick(() => {
+        const newCursorPos = hashIndex + refText.length
+        textarea.selectionStart = newCursorPos
+        textarea.selectionEnd = newCursorPos
+        textarea.focus()
+      })
+    }
+  }
+
+  showPersonRefDropdown.value = false
+  personRefFilterText.value = ''
+}
+
+function openPersonRefPicker() {
+  showPersonRefDropdown.value = true
+  personRefFilterText.value = ''
+  
+  const textarea = formBodyTextareaRef.value
+  if (textarea) {
+    const rect = textarea.getBoundingClientRect()
+    personRefDropdownPosition.value = {
+      top: rect.bottom + 4,
+      left: rect.left,
+    }
+  }
+}
+
+function addPersonRefFromPicker(candidate: PersonRefCandidate) {
+  const displayName = candidate.display_name
+  const refReq: PersonRefRequest = {
+    person_id: candidate.person_id,
+    display_name_snapshot: displayName,
+  }
+
+  if (!formPersonRefs.value.some((r) => r.person_id === candidate.person_id)) {
+    formPersonRefs.value.push(refReq)
+  }
+
+  const textarea = formBodyTextareaRef.value
+  if (textarea) {
+    const cursorPos = textarea.selectionStart
+    const insertText = `#${displayName} `
+    formBody.value = formBody.value.slice(0, cursorPos) + insertText + formBody.value.slice(cursorPos)
+    nextTick(() => {
+      const newCursorPos = cursorPos + insertText.length
+      textarea.selectionStart = newCursorPos
+      textarea.selectionEnd = newCursorPos
+      textarea.focus()
+    })
+  }
+
+  showPersonRefDropdown.value = false
+}
+
+function removePersonRef(personId: string) {
+  formPersonRefs.value = formPersonRefs.value.filter((r) => r.person_id !== personId)
+}
+
+function closePersonRefDropdown() {
+  showPersonRefDropdown.value = false
+  personRefFilterText.value = ''
+}
+
+function havePersonRefsChanged(): boolean {
+  const current = formPersonRefs.value
+  const original = formPersonRefsOriginal.value
+  if (current.length !== original.length) return true
+  const currentIds = new Set(current.map((r) => r.person_id))
+  const originalIds = new Set(original.map((r) => r.person_id))
+  if (currentIds.size !== originalIds.size) return true
+  for (const id of currentIds) {
+    if (!originalIds.has(id)) return true
+  }
+  return false
+}
+
+function handlePersonRefClick(personRef: PersonRefResponse) {
+  if (!personRef.clickable || !personRef.person_id) return
+  
+  if (familyId.value) {
+    router.push({
+      name: 'tree',
+      query: {
+        familyId: familyId.value,
+        selectPerson: personRef.person_id,
+      },
+    })
   }
 }
 
@@ -533,6 +755,27 @@ function handleCommentError(message: string) {
             <p class="body-text">{{ selectedStory.body }}</p>
           </div>
 
+          <div v-if="selectedStory.person_refs && selectedStory.person_refs.length > 0" class="detail-person-refs">
+            <span class="refs-label">引用人物：</span>
+            <template v-for="(ref, idx) in selectedStory.person_refs" :key="idx">
+              <button
+                v-if="ref.clickable"
+                type="button"
+                class="person-ref-display person-ref-active"
+                @click="handlePersonRefClick(ref)"
+              >
+                #{{ ref.display_name_snapshot }}
+              </button>
+              <span
+                v-else
+                class="person-ref-display person-ref-inactive"
+                :class="{ 'person-ref-deceased': ref.status === 'deleted' }"
+              >
+                #{{ ref.display_name_snapshot }}
+              </span>
+            </template>
+          </div>
+
           <StoryCommentsPanel
             v-if="familyId && selectedStory"
             :family-id="familyId"
@@ -576,15 +819,45 @@ function handleCommentError(message: string) {
               <label class="form-label" for="body">内容</label>
               <textarea
                 id="body"
+                ref="formBodyTextareaRef"
                 v-model="formBody"
                 class="form-textarea"
-                placeholder="写下家族故事..."
+                placeholder="写下家族故事...（输入 # 可插入人物引用）"
                 rows="10"
                 :disabled="submitting"
+                @input="handleBodyInput"
+                @keydown="handleBodyKeydown"
               ></textarea>
-              <p class="form-hint" :class="{ 'hint-error': isBodyOverLimit }">
-                {{ bodyCharCount }} / {{ STORY_BODY_MAX_LENGTH }} 字
-              </p>
+              <div class="body-actions">
+                <button
+                  type="button"
+                  class="btn-insert-person"
+                  :disabled="submitting"
+                  @click="openPersonRefPicker"
+                >
+                  插入人物
+                </button>
+                <span class="form-hint" :class="{ 'hint-error': isBodyOverLimit }">
+                  {{ bodyCharCount }} / {{ STORY_BODY_MAX_LENGTH }} 字
+                </span>
+              </div>
+              <div v-if="formPersonRefs.length > 0" class="person-ref-chips">
+                <span
+                  v-for="r in formPersonRefs"
+                  :key="r.person_id"
+                  class="person-ref-chip"
+                >
+                  #{{ r.display_name_snapshot }}
+                  <button
+                    type="button"
+                    class="chip-remove"
+                    :disabled="submitting"
+                    @click="removePersonRef(r.person_id)"
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
             </div>
 
             <div class="form-row">
@@ -670,6 +943,27 @@ function handleCommentError(message: string) {
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- Person Ref Dropdown -->
+      <div
+        v-if="showPersonRefDropdown && filteredPersonRefCandidates.length > 0"
+        class="person-ref-dropdown"
+        :style="{ top: personRefDropdownPosition.top + 'px', left: personRefDropdownPosition.left + 'px' }"
+      >
+        <div class="person-ref-dropdown-header">选择要引用的人物</div>
+        <ul class="person-ref-dropdown-list">
+          <li
+            v-for="candidate in filteredPersonRefCandidates"
+            :key="candidate.person_id"
+            class="person-ref-dropdown-item"
+            :class="{ 'candidate-deceased': candidate.deceased }"
+            @click="addPersonRefFromPicker(candidate)"
+          >
+            {{ candidate.display_name }}
+            <span v-if="candidate.deceased" class="deceased-badge">已故</span>
+          </li>
+        </ul>
       </div>
     </main>
   </div>
@@ -1224,5 +1518,173 @@ function handleCommentError(message: string) {
   border-radius: 6px;
   color: #c53030;
   font-size: 14px;
+}
+
+/* Person Ref styles */
+.detail-person-refs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border, #e8e6e2);
+}
+
+.refs-label {
+  font-size: 14px;
+  color: #666;
+  margin-right: 4px;
+}
+
+.person-ref-display {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.person-ref-active {
+  background: #e8f4ed;
+  color: #276749;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.person-ref-active:hover {
+  background: #d4e9dc;
+  border-color: #276749;
+}
+
+.person-ref-inactive {
+  background: #f0eeeb;
+  color: #888;
+  cursor: default;
+}
+
+.person-ref-deceased {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.body-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.btn-insert-person {
+  padding: 6px 12px;
+  border: 1px solid var(--color-accent, #2f5d50);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--color-accent, #2f5d50);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-insert-person:hover:not(:disabled) {
+  background: rgba(47, 93, 80, 0.08);
+}
+
+.btn-insert-person:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.person-ref-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.person-ref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #e8f4ed;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #276749;
+}
+
+.chip-remove {
+  padding: 0 2px;
+  margin-left: 2px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.chip-remove:hover {
+  color: #c53030;
+}
+
+.chip-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.person-ref-dropdown {
+  position: fixed;
+  z-index: 100;
+  min-width: 200px;
+  max-width: 300px;
+  max-height: 250px;
+  background: #fff;
+  border: 1px solid var(--color-border, #d8d4cc);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.person-ref-dropdown-header {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #666;
+  background: #faf9f7;
+  border-bottom: 1px solid var(--color-border, #e8e6e2);
+}
+
+.person-ref-dropdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.person-ref-dropdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+}
+
+.person-ref-dropdown-item:hover {
+  background: #f5f5f5;
+}
+
+.candidate-deceased {
+  color: #666;
+}
+
+.deceased-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: #f0eeeb;
+  border-radius: 4px;
+  color: #888;
 }
 </style>

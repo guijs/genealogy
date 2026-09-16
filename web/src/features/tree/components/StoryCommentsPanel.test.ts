@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import StoryCommentsPanel from './StoryCommentsPanel.vue'
-import type { CommentResponse, MentionResponse } from '../api/types'
+import type { CommentResponse, MentionResponse, PersonRefResponse } from '../api/types'
 import type { FamilyMember } from '../api/memberClient'
 
 vi.mock('../api/commentClient', () => ({
@@ -22,7 +22,21 @@ vi.mock('../api/commentClient', () => ({
   COMMENT_BODY_MAX_LENGTH: 2000,
 }))
 
+vi.mock('../api/personRefClient', () => ({
+  fetchPersonRefCandidates: vi.fn(),
+  PersonRefApiError: class PersonRefApiError extends Error {
+    status: number
+    code?: string
+    constructor(message: string, status: number, code?: string) {
+      super(message)
+      this.status = status
+      this.code = code
+    }
+  },
+}))
+
 import { listComments, createComment, updateComment, deleteComment } from '../api/commentClient'
+import { fetchPersonRefCandidates } from '../api/personRefClient'
 
 const mockComment = (overrides: Partial<CommentResponse> = {}): CommentResponse => ({
   id: 'comment-1',
@@ -46,6 +60,7 @@ describe('StoryCommentsPanel', () => {
   beforeEach(() => {
     vi.mocked(listComments).mockResolvedValue({ comments: [] })
     vi.mocked(deleteComment).mockResolvedValue(undefined)
+    vi.mocked(fetchPersonRefCandidates).mockResolvedValue({ candidates: [] })
   })
 
   afterEach(() => {
@@ -548,6 +563,249 @@ describe('StoryCommentsPanel', () => {
       expect(vm.editMentions[0].user_id).toBe('user-active')
       expect(vm.editMentions.some((m) => m.display_name_snapshot.includes('已离开'))).toBe(false)
       expect(vm.editMentions.some((m) => m.display_name_snapshot.includes('已移除'))).toBe(false)
+    })
+  })
+
+  describe('person ref display', () => {
+    it('displays clickable person refs as buttons with highlight styling', async () => {
+      const clickableRef: PersonRefResponse = {
+        person_id: 'person-1',
+        display_name_snapshot: '张三',
+        status: 'active',
+        clickable: true,
+      }
+      const commentWithRef = mockComment({
+        person_refs: [clickableRef],
+      })
+      vi.mocked(listComments).mockResolvedValue({ comments: [commentWithRef] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-viewer',
+          members: [mockMember({ user_id: 'user-viewer', role: 'viewer' })],
+          isAdmin: false,
+          canWrite: false,
+        },
+      })
+
+      await flushPromises()
+
+      const personRefDisplay = wrapper.find('.person-ref-active')
+      expect(personRefDisplay.exists()).toBe(true)
+      expect(personRefDisplay.element.tagName.toLowerCase()).toBe('button')
+      expect(personRefDisplay.text()).toContain('#张三')
+    })
+
+    it('emits personRefClick event when clickable person ref is clicked', async () => {
+      const clickableRef: PersonRefResponse = {
+        person_id: 'person-1',
+        display_name_snapshot: '张三',
+        status: 'active',
+        clickable: true,
+      }
+      const commentWithRef = mockComment({
+        person_refs: [clickableRef],
+      })
+      vi.mocked(listComments).mockResolvedValue({ comments: [commentWithRef] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-viewer',
+          members: [mockMember({ user_id: 'user-viewer', role: 'viewer' })],
+          isAdmin: false,
+          canWrite: false,
+        },
+      })
+
+      await flushPromises()
+
+      const personRefButton = wrapper.find('.person-ref-active')
+      await personRefButton.trigger('click')
+
+      expect(wrapper.emitted('personRefClick')).toBeTruthy()
+      expect(wrapper.emitted('personRefClick')![0]).toEqual(['person-1'])
+    })
+
+    it('displays non-clickable person refs as non-clickable spans with muted styling', async () => {
+      const hiddenRef: PersonRefResponse = {
+        person_id: 'person-hidden',
+        display_name_snapshot: '隐藏人物',
+        status: 'hidden',
+        clickable: false,
+      }
+      const deletedRef: PersonRefResponse = {
+        person_id: null,
+        display_name_snapshot: '已删除人物',
+        status: 'deleted',
+        clickable: false,
+      }
+      const commentWithRefs = mockComment({
+        person_refs: [hiddenRef, deletedRef],
+      })
+      vi.mocked(listComments).mockResolvedValue({ comments: [commentWithRefs] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-viewer',
+          members: [mockMember({ user_id: 'user-viewer', role: 'viewer' })],
+          isAdmin: false,
+          canWrite: false,
+        },
+      })
+
+      await flushPromises()
+
+      const inactiveRefs = wrapper.findAll('.person-ref-inactive')
+      expect(inactiveRefs.length).toBe(2)
+      expect(inactiveRefs[0].element.tagName.toLowerCase()).toBe('span')
+      expect(inactiveRefs[1].element.tagName.toLowerCase()).toBe('span')
+      expect(inactiveRefs[0].text()).toContain('#隐藏人物')
+      expect(inactiveRefs[1].text()).toContain('#已删除人物')
+    })
+
+    it('applies deceased styling to deleted person refs', async () => {
+      const deletedRef: PersonRefResponse = {
+        person_id: null,
+        display_name_snapshot: '已删除人物',
+        status: 'deleted',
+        clickable: false,
+      }
+      const commentWithRef = mockComment({
+        person_refs: [deletedRef],
+      })
+      vi.mocked(listComments).mockResolvedValue({ comments: [commentWithRef] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-viewer',
+          members: [mockMember({ user_id: 'user-viewer', role: 'viewer' })],
+          isAdmin: false,
+          canWrite: false,
+        },
+      })
+
+      await flushPromises()
+
+      const deceasedRef = wrapper.find('.person-ref-deceased')
+      expect(deceasedRef.exists()).toBe(true)
+    })
+
+    it('shows insert person button in compose section', async () => {
+      vi.mocked(listComments).mockResolvedValue({ comments: [] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-editor',
+          members: [mockMember({ user_id: 'user-editor', role: 'editor' })],
+          isAdmin: false,
+          canWrite: true,
+        },
+      })
+
+      await flushPromises()
+
+      const insertButton = wrapper.find('.btn-insert-person-sm')
+      expect(insertButton.exists()).toBe(true)
+      expect(insertButton.text()).toBe('插入人物')
+    })
+
+    it('textarea placeholder mentions both @ and # triggers', async () => {
+      vi.mocked(listComments).mockResolvedValue({ comments: [] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-editor',
+          members: [mockMember({ user_id: 'user-editor', role: 'editor' })],
+          isAdmin: false,
+          canWrite: true,
+        },
+      })
+
+      await flushPromises()
+
+      const textarea = wrapper.find('.compose-section textarea')
+      expect(textarea.exists()).toBe(true)
+      const placeholder = textarea.attributes('placeholder')
+      expect(placeholder).toContain('@')
+      expect(placeholder).toContain('#')
+    })
+  })
+
+  describe('# trigger does not open @ dropdown', () => {
+    it('typing # does not show mention dropdown', async () => {
+      vi.mocked(listComments).mockResolvedValue({ comments: [] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-editor',
+          members: [
+            mockMember({ user_id: 'user-editor', role: 'editor' }),
+            mockMember({ user_id: 'user-other', role: 'viewer' }),
+          ],
+          isAdmin: false,
+          canWrite: true,
+        },
+      })
+
+      await flushPromises()
+
+      const textarea = wrapper.find('.compose-section textarea')
+      await textarea.setValue('#test')
+      await textarea.trigger('input')
+
+      await flushPromises()
+
+      const mentionDropdown = wrapper.find('.mention-dropdown')
+      expect(mentionDropdown.exists()).toBe(false)
+    })
+
+    it('typing @ after # still triggers mention dropdown when appropriate', async () => {
+      vi.mocked(listComments).mockResolvedValue({ comments: [] })
+
+      const wrapper = mount(StoryCommentsPanel, {
+        props: {
+          familyId: 'family-1',
+          storyId: 'story-1',
+          currentUserId: 'user-editor',
+          members: [
+            mockMember({ user_id: 'user-editor', role: 'editor' }),
+            mockMember({ user_id: 'user-other', role: 'viewer' }),
+          ],
+          isAdmin: false,
+          canWrite: true,
+        },
+      })
+
+      await flushPromises()
+
+      const vm = wrapper.vm as unknown as { showMentionDropdown: boolean; showPersonRefDropdown: boolean }
+      
+      const textarea = wrapper.find('.compose-section textarea')
+      await textarea.setValue('#person @')
+      
+      const textareaEl = textarea.element as HTMLTextAreaElement
+      textareaEl.selectionStart = 9
+      textareaEl.selectionEnd = 9
+      
+      await textarea.trigger('input')
+      await flushPromises()
+
+      expect(vm.showMentionDropdown).toBe(true)
+      expect(vm.showPersonRefDropdown).toBe(false)
     })
   })
 })

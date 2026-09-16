@@ -72,6 +72,14 @@ export class CommentApiError extends Error {
     )
   }
 
+  static invalidPersonRef(): CommentApiError {
+    return new CommentApiError(
+      '引用的人物无效或不存在于当前家族',
+      400,
+      'INVALID_PERSON_REF',
+    )
+  }
+
   static versionConflict(currentComment: CommentResponse): CommentApiError {
     return new CommentApiError(
       '评论已被更新，已加载最新内容',
@@ -270,8 +278,13 @@ export async function createComment(
   })
 
   if (!res.ok) {
-    if (res.status === 400 && data.mentions && data.mentions.length > 0) {
-      throw CommentApiError.invalidMention()
+    if (res.status === 400) {
+      if (data.person_refs && data.person_refs.length > 0) {
+        throw CommentApiError.invalidPersonRef()
+      }
+      if (data.mentions && data.mentions.length > 0) {
+        throw CommentApiError.invalidMention()
+      }
     }
     throw CommentApiError.fromStatus(res.status, 'create')
   }
@@ -326,8 +339,13 @@ export async function updateComment(
       const currentComment = (await res.json()) as CommentResponse
       throw CommentApiError.versionConflict(currentComment)
     }
-    if (res.status === 400 && data.mentions && data.mentions.length > 0) {
-      throw CommentApiError.invalidMention()
+    if (res.status === 400) {
+      if (data.person_refs && data.person_refs.length > 0) {
+        throw CommentApiError.invalidPersonRef()
+      }
+      if (data.mentions && data.mentions.length > 0) {
+        throw CommentApiError.invalidMention()
+      }
     }
     throw CommentApiError.fromStatus(res.status, 'update')
   }
