@@ -14,16 +14,28 @@ public class UpdateStoryRequest {
     @JsonProperty("person_ids")
     private List<String> personIds;
 
+    @JsonProperty("person_refs")
+    private List<PersonRefRequest> personRefs;
+
+    private boolean personRefsProvided = false;
+
     private Integer version;
 
     public UpdateStoryRequest() {}
 
     public UpdateStoryRequest(String title, String body, String narrativeTime,
                               List<String> personIds, Integer version) {
+        this(title, body, narrativeTime, personIds, null, version);
+    }
+
+    public UpdateStoryRequest(String title, String body, String narrativeTime,
+                              List<String> personIds, List<PersonRefRequest> personRefs, Integer version) {
         this.title = title;
         this.body = body;
         this.narrativeTime = narrativeTime;
         this.personIds = personIds;
+        this.personRefs = personRefs;
+        this.personRefsProvided = true;
         this.version = version;
     }
 
@@ -65,5 +77,18 @@ public class UpdateStoryRequest {
 
     public void setVersion(Integer version) {
         this.version = version;
+    }
+
+    public List<PersonRefRequest> getPersonRefs() {
+        return personRefs;
+    }
+
+    public void setPersonRefs(List<PersonRefRequest> personRefs) {
+        this.personRefs = personRefs;
+        this.personRefsProvided = true;
+    }
+
+    public boolean isPersonRefsProvided() {
+        return personRefsProvided;
     }
 }

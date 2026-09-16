@@ -27,5 +27,6 @@ V{version}__{description}.sql
 | V6 | 故事评论（story_comments 表，深度 ≤ 2） |
 | V7 | 故事评论 v0.2（移除嵌套评论，添加 updated_at 列） |
 | V8 | 评论提及（comment_mentions 表） |
+| V9 | 人物引用（person_refs）功能 |
 
 迁移会在 Spring Boot 启动时通过 `flyway.baseline-on-migrate: true` 自动执行。

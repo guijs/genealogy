@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.genealogy.mapper.StoryPersonRefMapper">
+
+    <resultMap id="personRefRowResultMap" type="com.genealogy.mapper.StoryPersonRefMapper$PersonRefRow">
+        <constructor>
+            <idArg column="id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="story_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="person_id" javaType="java.util.UUID" typeHandler="com.genealogy.config.MyBatisConfig$UUIDTypeHandler"/>
+            <arg column="display_name_snapshot" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.Instant"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO story_person_refs (id, story_id, person_id, display_name_snapshot)
+        VALUES (#{id}, #{storyId}, #{personId}, #{displayNameSnapshot})
+    </insert>
+
+    <select id="findByStoryId" resultMap="personRefRowResultMap">
+        SELECT id, story_id, person_id, display_name_snapshot, created_at
+        FROM story_person_refs
+        WHERE story_id = #{storyId}
+        ORDER BY created_at ASC
+    </select>
+
+    <select id="findByStoryIds" resultMap="personRefRowResultMap">
+        <if test="storyIds != null and storyIds.size() > 0">
+            SELECT id, story_id, person_id, display_name_snapshot, created_at
+            FROM story_person_refs
+            WHERE story_id IN
+            <foreach collection="storyIds" item="storyId" open="(" separator="," close=")">
+                #{storyId}
+            </foreach>
+            ORDER BY story_id, created_at ASC
+        </if>
+    </select>
+
+    <delete id="deleteByStoryId">
+        DELETE FROM story_person_refs WHERE story_id = #{storyId}
+    </delete>
+
+    <delete id="deleteAll">
+        DELETE FROM story_person_refs
+    </delete>
+
+</mapper>

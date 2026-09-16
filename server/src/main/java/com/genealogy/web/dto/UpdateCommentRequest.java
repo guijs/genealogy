@@ -8,6 +8,11 @@ public class UpdateCommentRequest {
     private String body;
     private List<MentionRequest> mentions;
 
+    @JsonProperty("person_refs")
+    private List<PersonRefRequest> personRefs;
+
+    private boolean personRefsProvided = false;
+
     @JsonProperty("updated_at")
     private String updatedAt;
 
@@ -20,8 +25,15 @@ public class UpdateCommentRequest {
     }
 
     public UpdateCommentRequest(String body, List<MentionRequest> mentions, String updatedAt) {
+        this(body, mentions, null, updatedAt);
+    }
+
+    public UpdateCommentRequest(String body, List<MentionRequest> mentions,
+                                List<PersonRefRequest> personRefs, String updatedAt) {
         this.body = body;
         this.mentions = mentions;
+        this.personRefs = personRefs;
+        this.personRefsProvided = true;
         this.updatedAt = updatedAt;
     }
 
@@ -39,6 +51,19 @@ public class UpdateCommentRequest {
 
     public void setMentions(List<MentionRequest> mentions) {
         this.mentions = mentions;
+    }
+
+    public List<PersonRefRequest> getPersonRefs() {
+        return personRefs;
+    }
+
+    public void setPersonRefs(List<PersonRefRequest> personRefs) {
+        this.personRefs = personRefs;
+        this.personRefsProvided = true;
+    }
+
+    public boolean isPersonRefsProvided() {
+        return personRefsProvided;
     }
 
     public String getUpdatedAt() {

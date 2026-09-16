@@ -2,10 +2,12 @@ package com.genealogy.web;
 
 import com.genealogy.domain.family.Membership;
 import com.genealogy.domain.story.Story;
+import com.genealogy.service.PersonRefUpdateAction;
 import com.genealogy.service.StoryService;
 import com.genealogy.web.dto.CreateStoryRequest;
 import com.genealogy.web.dto.DeleteStoryRequest;
 import com.genealogy.web.dto.ErrorResponse;
+import com.genealogy.web.dto.PersonRefRequest;
 import com.genealogy.web.dto.StoriesListResponse;
 import com.genealogy.web.dto.StoryResponse;
 import com.genealogy.web.dto.UpdateStoryRequest;
@@ -117,6 +119,13 @@ public class StoryController {
             return ResponseEntity.badRequest().body(new ErrorResponse("invalid person_ids format"));
         }
 
+        List<StoryService.PersonRefInput> personRefs;
+        try {
+            personRefs = parsePersonRefs(body.getPersonRefs());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+
         try {
             Story story = storyService.createStory(
                     familyId,
@@ -124,13 +133,19 @@ public class StoryController {
                     body.getTitle(),
                     body.getBody(),
                     narrativeTime,
-                    personIds
+                    personIds,
+                    personRefs,
+                    membership.getRole()
             );
             return ResponseEntity.status(201).body(StoryResponse.fromStory(story));
+        } catch (StoryService.WriteAccessDeniedException e) {
+            return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
         } catch (StoryService.InvalidBodyException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryService.InvalidPersonException e) {
             return ResponseEntity.status(409).body(new ErrorResponse(e.getMessage()));
+        } catch (StoryService.InvalidPersonRefException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
     }
 
@@ -173,6 +188,13 @@ public class StoryController {
             return ResponseEntity.badRequest().body(new ErrorResponse("invalid person_ids format"));
         }
 
+        PersonRefUpdateAction personRefAction;
+        try {
+            personRefAction = parsePersonRefUpdateAction(body.getPersonRefs());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+
         try {
             Story story = storyService.updateStory(
                     familyId,
@@ -183,6 +205,7 @@ public class StoryController {
                     body.getBody(),
                     narrativeTime,
                     personIds,
+                    personRefAction,
                     body.getVersion()
             );
             return ResponseEntity.ok(StoryResponse.fromStory(story));
@@ -196,6 +219,8 @@ public class StoryController {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryService.InvalidPersonException e) {
             return ResponseEntity.status(409).body(new ErrorResponse(e.getMessage()));
+        } catch (StoryService.InvalidPersonRefException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
     }
 
@@ -249,5 +274,51 @@ public class StoryController {
             }
         }
         return result;
+    }
+
+    private List<StoryService.PersonRefInput> parsePersonRefs(List<PersonRefRequest> personRefRequests) {
+        if (personRefRequests == null || personRefRequests.isEmpty()) {
+            return null;
+        }
+
+        return personRefRequests.stream()
+                .map(r -> {
+                    UUID personId = null;
+                    if (r.getPersonId() != null && !r.getPersonId().isBlank()) {
+                        try {
+                            personId = UUID.fromString(r.getPersonId());
+                        } catch (IllegalArgumentException e) {
+                            throw new IllegalArgumentException("invalid person_id format");
+                        }
+                    }
+                    return new StoryService.PersonRefInput(personId, r.getDisplayNameSnapshot());
+                })
+                .collect(Collectors.toList());
+    }
+
+    private PersonRefUpdateAction parsePersonRefUpdateAction(List<PersonRefRequest> personRefRequests) {
+        if (personRefRequests == null) {
+            return new PersonRefUpdateAction.Omit();
+        }
+
+        if (personRefRequests.isEmpty()) {
+            return new PersonRefUpdateAction.ClearAll();
+        }
+
+        List<PersonRefUpdateAction.Replace.PersonRefInput> personRefs = personRefRequests.stream()
+                .map(r -> {
+                    UUID personId = null;
+                    if (r.getPersonId() != null && !r.getPersonId().isBlank()) {
+                        try {
+                            personId = UUID.fromString(r.getPersonId());
+                        } catch (IllegalArgumentException e) {
+                            throw new IllegalArgumentException("invalid person_id format");
+                        }
+                    }
+                    return new PersonRefUpdateAction.Replace.PersonRefInput(personId, r.getDisplayNameSnapshot());
+                })
+                .collect(Collectors.toList());
+
+        return new PersonRefUpdateAction.Replace(personRefs);
     }
 }

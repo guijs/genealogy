@@ -3,6 +3,7 @@ package com.genealogy.web;
 import com.genealogy.domain.family.Membership;
 import com.genealogy.domain.story.StoryComment;
 import com.genealogy.service.MentionUpdateAction;
+import com.genealogy.service.PersonRefUpdateAction;
 import com.genealogy.service.StoryCommentService;
 import com.genealogy.web.dto.*;
 import com.genealogy.web.filter.FamilyMembershipFilter;
@@ -113,6 +114,13 @@ public class StoryCommentController {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
 
+        List<StoryCommentService.PersonRefInput> personRefs;
+        try {
+            personRefs = parsePersonRefs(body.getPersonRefs());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+
         try {
             StoryComment comment = commentService.createComment(
                     familyId,
@@ -120,6 +128,7 @@ public class StoryCommentController {
                     membership.getUserId(),
                     body.getBody(),
                     mentions,
+                    personRefs,
                     membership.getRole()
             );
             return ResponseEntity.status(201).body(CommentResponse.fromComment(comment));
@@ -128,6 +137,8 @@ public class StoryCommentController {
         } catch (StoryCommentService.InvalidBodyException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.InvalidMentionException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (StoryCommentService.InvalidPersonRefException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.PermissionDeniedException e) {
             return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
@@ -176,6 +187,13 @@ public class StoryCommentController {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
 
+        PersonRefUpdateAction personRefAction;
+        try {
+            personRefAction = parsePersonRefUpdateAction(body.getPersonRefs());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+
         try {
             StoryComment comment = commentService.updateComment(
                     familyId,
@@ -184,6 +202,7 @@ public class StoryCommentController {
                     membership.getUserId(),
                     body.getBody(),
                     mentionAction,
+                    personRefAction,
                     expectedUpdatedAt,
                     membership.getRole()
             );
@@ -195,6 +214,8 @@ public class StoryCommentController {
         } catch (StoryCommentService.InvalidBodyException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.InvalidMentionException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (StoryCommentService.InvalidPersonRefException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.PermissionDeniedException e) {
             return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
@@ -266,13 +287,6 @@ public class StoryCommentController {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Parse mention update action for PUT update comment.
-     * Distinguishes between:
-     * - null (omit): do not touch existing mentions
-     * - empty list []: clear all mentions
-     * - non-empty list: replace active/current-member mentions only
-     */
     private MentionUpdateAction parseMentionUpdateAction(List<MentionRequest> mentionRequests) {
         if (mentionRequests == null) {
             return new MentionUpdateAction.Omit();
@@ -297,5 +311,51 @@ public class StoryCommentController {
                 .collect(Collectors.toList());
 
         return new MentionUpdateAction.Replace(mentions);
+    }
+
+    private List<StoryCommentService.PersonRefInput> parsePersonRefs(List<PersonRefRequest> personRefRequests) {
+        if (personRefRequests == null || personRefRequests.isEmpty()) {
+            return null;
+        }
+
+        return personRefRequests.stream()
+                .map(r -> {
+                    UUID personId = null;
+                    if (r.getPersonId() != null && !r.getPersonId().isBlank()) {
+                        try {
+                            personId = UUID.fromString(r.getPersonId());
+                        } catch (IllegalArgumentException e) {
+                            throw new IllegalArgumentException("invalid person_id format");
+                        }
+                    }
+                    return new StoryCommentService.PersonRefInput(personId, r.getDisplayNameSnapshot());
+                })
+                .collect(Collectors.toList());
+    }
+
+    private PersonRefUpdateAction parsePersonRefUpdateAction(List<PersonRefRequest> personRefRequests) {
+        if (personRefRequests == null) {
+            return new PersonRefUpdateAction.Omit();
+        }
+
+        if (personRefRequests.isEmpty()) {
+            return new PersonRefUpdateAction.ClearAll();
+        }
+
+        List<PersonRefUpdateAction.Replace.PersonRefInput> personRefs = personRefRequests.stream()
+                .map(r -> {
+                    UUID personId = null;
+                    if (r.getPersonId() != null && !r.getPersonId().isBlank()) {
+                        try {
+                            personId = UUID.fromString(r.getPersonId());
+                        } catch (IllegalArgumentException e) {
+                            throw new IllegalArgumentException("invalid person_id format");
+                        }
+                    }
+                    return new PersonRefUpdateAction.Replace.PersonRefInput(personId, r.getDisplayNameSnapshot());
+                })
+                .collect(Collectors.toList());
+
+        return new PersonRefUpdateAction.Replace(personRefs);
     }
 }
