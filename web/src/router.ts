@@ -3,6 +3,7 @@ import TreePage from './pages/TreePage.vue'
 import CreateFamilyPage from './pages/CreateFamilyPage.vue'
 import MembersPage from './pages/MembersPage.vue'
 import MediaUploadPage from './pages/MediaUploadPage.vue'
+import StoriesPage from './pages/StoriesPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import RegisterPage from './pages/RegisterPage.vue'
 import { useAuthStore } from './stores/authStore'
@@ -31,6 +32,12 @@ const routes = [
     path: '/media-upload',
     name: 'mediaUpload',
     component: MediaUploadPage,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/stories',
+    name: 'stories',
+    component: StoriesPage,
     meta: { requiresAuth: true },
   },
   {

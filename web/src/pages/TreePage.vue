@@ -159,6 +159,15 @@ function goToMediaUpload() {
   }
 }
 
+function goToStories() {
+  const familyId = route.query.familyId as string | undefined
+  if (familyId) {
+    router.push({ name: 'stories', query: { familyId } })
+  } else {
+    router.push({ name: 'stories' })
+  }
+}
+
 watch(addSpouseFormOpen, (open) => {
   if (open) {
     selectedSpouseId.value = ''
@@ -295,6 +304,14 @@ function handleLogout() {
           @click="goToMediaUpload"
         >
           媒体上传
+        </button>
+        <button
+          v-if="usingGraphApi"
+          type="button"
+          class="btn-create-family"
+          @click="goToStories"
+        >
+          家族故事
         </button>
         <button
           v-if="usingGraphApi && hiddenPersonsForCurrentFamily.length > 0"
