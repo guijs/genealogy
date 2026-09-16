@@ -15,9 +15,6 @@ public class CommentResponse {
     @JsonProperty("story_id")
     private final String storyId;
 
-    @JsonProperty("parent_comment_id")
-    private final String parentCommentId;
-
     @JsonProperty("author_user_id")
     private final String authorUserId;
 
@@ -26,24 +23,27 @@ public class CommentResponse {
     @JsonProperty("created_at")
     private final String createdAt;
 
-    public CommentResponse(String id, String storyId, String parentCommentId, String authorUserId,
-                           String body, String createdAt) {
+    @JsonProperty("updated_at")
+    private final String updatedAt;
+
+    public CommentResponse(String id, String storyId, String authorUserId, String body,
+                           String createdAt, String updatedAt) {
         this.id = id;
         this.storyId = storyId;
-        this.parentCommentId = parentCommentId;
         this.authorUserId = authorUserId;
         this.body = body;
         this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
     }
 
     public static CommentResponse fromComment(StoryComment comment) {
         return new CommentResponse(
                 comment.getId().toString(),
                 comment.getStoryId().toString(),
-                comment.getParentCommentId() != null ? comment.getParentCommentId().toString() : null,
                 comment.getAuthorUserId().toString(),
                 comment.getBody(),
-                comment.getCreatedAt() != null ? INSTANT_FORMATTER.format(comment.getCreatedAt()) : null
+                comment.getCreatedAt() != null ? INSTANT_FORMATTER.format(comment.getCreatedAt()) : null,
+                comment.getUpdatedAt() != null ? INSTANT_FORMATTER.format(comment.getUpdatedAt()) : null
         );
     }
 
@@ -53,10 +53,6 @@ public class CommentResponse {
 
     public String getStoryId() {
         return storyId;
-    }
-
-    public String getParentCommentId() {
-        return parentCommentId;
     }
 
     public String getAuthorUserId() {
@@ -69,5 +65,9 @@ public class CommentResponse {
 
     public String getCreatedAt() {
         return createdAt;
+    }
+
+    public String getUpdatedAt() {
+        return updatedAt;
     }
 }
