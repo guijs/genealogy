@@ -1,77 +1,77 @@
-# QA Report: PR#54 Story Comments v0.2 - CHANGES REQUIRED
+# QA 报告：PR#54 故事评论 v0.2 - 需要修改
 
-> QA: ⑥  
-> PR: #54  
-> Original HEAD: `0ccfd7f`  
-> Status: **CHANGES REQUIRED** → **FIXED**
+> QA：⑥  
+> PR：#54  
+> 原始 HEAD：`0ccfd7f`  
+> 状态：**需要修改** → **已修复**
 
 ---
 
-## MAJOR-1: Viewer can edit/delete own comments
+## MAJOR-1：查看者可以编辑/删除自己的评论
 
-### Issue
-`updateComment` / `deleteComment` did not require write role. `WriteAccessFilter` only gated POST on comments, not PUT|DELETE. A user who authored a comment then gets demoted to **viewer** could still edit/delete own comments — violates v0.2 「viewer 只读」.
+### 问题
+`updateComment` / `deleteComment` 没有要求写入角色。`WriteAccessFilter` 仅对 POST 评论请求进行拦截，未处理 PUT|DELETE。一个创作了评论的用户被降级为 **viewer（查看者）** 后仍能编辑/删除自己的评论 — 违反 v0.2「viewer 只读」规范。
 
-### Root Cause
-`WriteAccessFilter.isWriteEndpoint()` only checked:
+### 根本原因
+`WriteAccessFilter.isWriteEndpoint()` 仅检查：
 ```java
 if ("POST".equals(method) && COMMENTS_POST_PATH_PATTERN.matcher(path).matches()) {
     return true;
 }
 ```
 
-Missing check for PUT|DELETE on individual comments (`/comments/{id}`).
+缺少对单条评论（`/comments/{id}`）PUT|DELETE 的检查。
 
-### Fix Applied
+### 已应用修复
 
-1. **WriteAccessFilter**: Added `COMMENTS_ITEM_PATH_PATTERN` and check for PUT|DELETE:
+1. **WriteAccessFilter**：添加 `COMMENTS_ITEM_PATH_PATTERN` 及 PUT|DELETE 检查：
 ```java
 private static final Pattern COMMENTS_ITEM_PATH_PATTERN = 
     Pattern.compile("^/api/v1/families/[^/]+/stories/[^/]+/comments/[^/]+$");
 
-// In isWriteEndpoint():
+// 在 isWriteEndpoint() 中：
 if (("PUT".equals(method) || "DELETE".equals(method)) && COMMENTS_ITEM_PATH_PATTERN.matcher(path).matches()) {
     return true;
 }
 ```
 
-2. **Service layer checks retained**:
-   - Author-only edit: `NotAuthorException` in `updateComment`
-   - Admin-only delete others: `Role.ADMIN` check in `deleteComment`
+2. **服务层检查保留**：
+   - 仅作者可编辑：`updateComment` 中的 `NotAuthorException`
+   - 仅管理员可删除他人评论：`deleteComment` 中的 `Role.ADMIN` 检查
 
-3. **Regression tests added**:
+3. **新增回归测试**：
    - `regression_viewerCannotEditOwnComment_returns403()`
    - `regression_viewerCannotDeleteOwnComment_returns403()`
 
-### Verification
+### 验证结果
 
-| Scenario | Expected | Result |
-|----------|----------|--------|
-| Editor creates comment | 201 | ✅ |
-| Editor demoted to viewer | — | — |
-| Viewer PUT own comment | 403 "write access required" | ✅ |
-| Viewer DELETE own comment | 403 "write access required" | ✅ |
-| Admin PUT other's comment | 403 "only author can edit" | ✅ |
-| Editor DELETE other's comment | 403 "only author or admin can delete" | ✅ |
-| Admin DELETE other's comment | 204 | ✅ |
-
----
-
-## Test Summary
-
-- **Total tests**: 402 (was 400, +2 regression tests)
-- **Passing**: 402
-- **Failing**: 0
+| 场景 | 预期 | 结果 |
+|------|------|------|
+| 编辑者创建评论 | 201 | ✅ |
+| 编辑者被降级为查看者 | — | — |
+| 查看者 PUT 自己的评论 | 403 "需要写入权限" | ✅ |
+| 查看者 DELETE 自己的评论 | 403 "需要写入权限" | ✅ |
+| 管理员 PUT 他人评论 | 403 "仅作者可编辑" | ✅ |
+| 编辑者 DELETE 他人评论 | 403 "仅作者或管理员可删除" | ✅ |
+| 管理员 DELETE 他人评论 | 204 | ✅ |
 
 ---
 
-## Files Changed
+## 测试摘要
 
-1. `WriteAccessFilter.java` - Added PUT|DELETE gate for comments
-2. `StoryCommentControllerTest.java` - Added 2 regression tests
+- **总测试数**：402（原为 400，+2 回归测试）
+- **通过**：402
+- **失败**：0
 
 ---
 
-## Conclusion
+## 变更文件
 
-MAJOR-1 fixed. All comment writes (POST/PUT/DELETE) now require `canWrite()` role (admin/editor). Viewer is fully read-only per v0.2 spec.
+1. `WriteAccessFilter.java` - 添加评论 PUT|DELETE 拦截
+2. `StoryCommentControllerTest.java` - 添加 2 个回归测试
+
+---
+
+## 结论
+
+MAJOR-1 已修复。所有评论写操作（POST/PUT/DELETE）现在都需要 `canWrite()` 角色（admin/editor）。Viewer（查看者）完全只读，符合 v0.2 规范。

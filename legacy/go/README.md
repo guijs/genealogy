@@ -1,33 +1,32 @@
-# Legacy Go Backend (Archived)
+# 旧版 Go 后端（已归档）
 
-**Status:** ⚠️ ARCHIVED — Read-only reference code
+**状态：** ⚠️ 已归档 — 仅供参考的只读代码
 
-This directory contains the original Go backend implementation. It has been archived
-as of Phase 0 migration to Java/Spring Boot.
+本目录包含原始的 Go 后端实现。自第 0 阶段迁移至 Java/Spring Boot 后已归档。
 
-## Active Backend
+## 活跃后端
 
-The active backend is now located at `server/` (Spring Boot + JDK 17 + MyBatis).
+当前活跃的后端位于 `server/`（Spring Boot + JDK 17 + MyBatis）。
 
-**Do not modify or extend this code.** It is preserved for historical reference only.
+**请勿修改或扩展此代码。** 仅作为历史参考保留。
 
-## Original Structure
+## 原始结构
 
 ```
 legacy/go/
-├── cmd/api/              # Original Go API entrypoint
+├── cmd/api/              # 原 Go API 入口点
 ├── internal/
-│   ├── domain/           # Business logic (person, kinship, family)
-│   ├── app/              # Application services
-│   ├── adapter/          # Adapters (HTTP, Postgres, ObjectStore)
-│   └── platform/         # Infrastructure
-├── migrations/           # Original golang-migrate migrations
+│   ├── domain/           # 业务逻辑（person、kinship、family）
+│   ├── app/              # 应用服务
+│   ├── adapter/          # 适配器（HTTP、Postgres、ObjectStore）
+│   └── platform/         # 基础设施
+├── migrations/           # 原 golang-migrate 迁移脚本
 ├── go.mod
 └── go.sum
 ```
 
-## Migration Notes
+## 迁移说明
 
-- The Go codebase implemented IDOR protection, kinship graph, and relationship services
-- Domain logic and API contracts will be ported to Java in Phase 1+
-- This code serves as specification reference for the new implementation
+- Go 代码库实现了 IDOR 防护、亲属图谱和关系服务
+- 领域逻辑和 API 契约将在第 1 阶段及之后移植到 Java
+- 此代码作为新实现的规范参考
