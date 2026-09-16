@@ -341,12 +341,40 @@ export interface StoriesListResponse {
 }
 
 /**
- * Comment API types (PR#54)
+ * Comment API types (PR#54, PR#58 mentions)
  *
  * Flat comments on stories (no nested replies in v0.2).
  * Uses snake_case JSON, Bearer auth.
  * Optimistic concurrency via updated_at (ISO-8601 Instant).
  */
+
+/**
+ * Mention status indicating member's current standing in the family.
+ * - active: Member is currently in the family (clickable/highlighted)
+ * - left: Member voluntarily left the family
+ * - removed: Member was removed from the family
+ */
+export type MentionStatus = 'active' | 'left' | 'removed'
+
+/**
+ * Mention request payload for creating/updating comments.
+ * Only structured mentions from picker are sent; plain @text is not auto-parsed.
+ */
+export interface MentionRequest {
+  user_id: string
+  display_name_snapshot: string
+}
+
+/**
+ * Mention response payload returned from the server.
+ * - user_id may be null if the user was removed from the system
+ * - status indicates current member standing
+ */
+export interface MentionResponse {
+  user_id: string | null
+  display_name_snapshot: string
+  status: MentionStatus
+}
 
 export interface CommentResponse {
   id: string
@@ -355,15 +383,18 @@ export interface CommentResponse {
   body: string
   created_at: string
   updated_at: string
+  mentions?: MentionResponse[]
 }
 
 export interface CreateCommentRequest {
   body: string
+  mentions?: MentionRequest[]
 }
 
 export interface UpdateCommentRequest {
   body: string
   updated_at: string
+  mentions?: MentionRequest[]
 }
 
 export interface CommentsListResponse {

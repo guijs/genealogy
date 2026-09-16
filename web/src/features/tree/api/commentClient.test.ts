@@ -8,7 +8,7 @@ import {
   CommentApiError,
   COMMENT_BODY_MAX_LENGTH,
 } from './commentClient'
-import type { CommentResponse } from './types'
+import type { CommentResponse, MentionRequest, MentionResponse } from './types'
 
 const mockLocalStorage = (() => {
   let store: Record<string, string> = {}
@@ -27,6 +27,16 @@ const mockComment: CommentResponse = {
   body: 'This is a test comment.',
   created_at: '2024-01-01T10:00:00Z',
   updated_at: '2024-01-01T10:00:00Z',
+}
+
+const mockMentions: MentionResponse[] = [
+  { user_id: 'user-2', display_name_snapshot: '成员 user-2（编辑）', status: 'active' },
+  { user_id: null, display_name_snapshot: '成员 user-3（已离开）', status: 'left' },
+]
+
+const mockCommentWithMentions: CommentResponse = {
+  ...mockComment,
+  mentions: mockMentions,
 }
 
 describe('commentClient', () => {
@@ -71,6 +81,13 @@ describe('commentClient', () => {
     it('creates updated_at required error', () => {
       const error = CommentApiError.updatedAtRequired()
       expect(error.code).toBe('UPDATED_AT_REQUIRED')
+    })
+
+    it('creates invalid mention error with Chinese message', () => {
+      const error = CommentApiError.invalidMention()
+      expect(error.status).toBe(400)
+      expect(error.code).toBe('INVALID_MENTION')
+      expect(error.message).toBe('提及的成员无效或不是当前家族成员')
     })
   })
 
@@ -251,6 +268,65 @@ describe('commentClient', () => {
         createComment('family-1', 'story-1', { body: 'Test body' }),
       ).rejects.toThrow('没有编辑权限')
     })
+
+    it('sends mentions in request body', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockCommentWithMentions),
+      } as Response)
+
+      const mentions: MentionRequest[] = [
+        { user_id: 'user-2', display_name_snapshot: '成员 user-2（编辑）' },
+      ]
+
+      const result = await createComment('family-1', 'story-1', {
+        body: 'Hello @成员 user-2（编辑）',
+        mentions,
+      })
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"mentions"'),
+        }),
+      )
+      expect(result.mentions).toBeDefined()
+      expect(result.mentions?.length).toBe(2)
+    })
+
+    it('handles 400 error with invalid mention', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+      } as Response)
+
+      const invalidMentions: MentionRequest[] = [
+        { user_id: 'non-existent-user', display_name_snapshot: 'Unknown' },
+      ]
+
+      try {
+        await createComment('family-1', 'story-1', {
+          body: 'Hello @Unknown',
+          mentions: invalidMentions,
+        })
+        expect.fail('Expected error to be thrown')
+      } catch (e) {
+        expect(e).toBeInstanceOf(CommentApiError)
+        const err = e as CommentApiError
+        expect(err.status).toBe(400)
+        expect(err.code).toBe('INVALID_MENTION')
+        expect(err.message).toBe('提及的成员无效或不是当前家族成员')
+      }
+    })
   })
 
   describe('updateComment', () => {
@@ -374,6 +450,66 @@ describe('commentClient', () => {
           updated_at: '2024-01-01T10:00:00Z',
         }),
       ).rejects.toThrow(CommentApiError)
+    })
+
+    it('sends mentions in update request body', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockCommentWithMentions),
+      } as Response)
+
+      const mentions: MentionRequest[] = [
+        { user_id: 'user-2', display_name_snapshot: '成员 user-2（编辑）' },
+      ]
+
+      const result = await updateComment('family-1', 'story-1', 'comment-1', {
+        body: 'Updated with @成员 user-2（编辑）',
+        updated_at: '2024-01-01T10:00:00Z',
+        mentions,
+      })
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'PUT',
+          body: expect.stringContaining('"mentions"'),
+        }),
+      )
+      expect(result.mentions).toBeDefined()
+    })
+
+    it('handles 400 error with invalid mention on update', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+      } as Response)
+
+      const invalidMentions: MentionRequest[] = [
+        { user_id: 'non-existent-user', display_name_snapshot: 'Unknown' },
+      ]
+
+      try {
+        await updateComment('family-1', 'story-1', 'comment-1', {
+          body: 'Update with @Unknown',
+          updated_at: '2024-01-01T10:00:00Z',
+          mentions: invalidMentions,
+        })
+        expect.fail('Expected error to be thrown')
+      } catch (e) {
+        expect(e).toBeInstanceOf(CommentApiError)
+        const err = e as CommentApiError
+        expect(err.status).toBe(400)
+        expect(err.code).toBe('INVALID_MENTION')
+        expect(err.message).toBe('提及的成员无效或不是当前家族成员')
+      }
     })
   })
 

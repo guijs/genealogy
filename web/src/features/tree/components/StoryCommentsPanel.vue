@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import {
   listComments,
   createComment,
@@ -8,7 +8,7 @@ import {
   CommentApiError,
   COMMENT_BODY_MAX_LENGTH,
 } from '../api/commentClient'
-import type { CommentResponse } from '../api/types'
+import type { CommentResponse, MentionRequest, MentionResponse } from '../api/types'
 import type { FamilyMember } from '../api/memberClient'
 
 const props = defineProps<{
@@ -22,6 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'error', message: string): void
+  (e: 'mentionClick', userId: string): void
 }>()
 
 const comments = ref<CommentResponse[]>([])
@@ -37,6 +38,27 @@ const editUpdatedAt = ref('')
 
 const deleteConfirmId = ref<string | null>(null)
 const deleting = ref(false)
+
+const newMentions = ref<MentionRequest[]>([])
+const editMentions = ref<MentionRequest[]>([])
+const editMentionsOriginal = ref<MentionRequest[]>([])
+
+const clickedMentionKey = ref<string | null>(null)
+
+const showMentionDropdown = ref(false)
+const mentionDropdownMode = ref<'new' | 'edit'>('new')
+const mentionFilterText = ref('')
+const mentionDropdownPosition = ref({ top: 0, left: 0 })
+const newTextareaRef = ref<HTMLTextAreaElement | null>(null)
+const editTextareaRef = ref<HTMLTextAreaElement | null>(null)
+
+const filteredMembers = computed(() => {
+  const filter = mentionFilterText.value.toLowerCase()
+  return props.members.filter((m) => {
+    const display = getMemberDisplayName(m.user_id).toLowerCase()
+    return display.includes(filter)
+  })
+})
 
 const newCommentCharCount = computed(() => newCommentBody.value.length)
 const isNewCommentOverLimit = computed(() => newCommentBody.value.length > COMMENT_BODY_MAX_LENGTH)
@@ -57,6 +79,15 @@ function getMemberRole(userId: string): string | null {
   return member?.role ?? null
 }
 
+function getMemberDisplayName(userId: string): string {
+  const member = props.members.find((m) => m.user_id === userId)
+  if (member) {
+    const roleLabel = member.role === 'admin' ? '管理员' : member.role === 'editor' ? '编辑' : '查看者'
+    return `成员 ${userId.slice(0, 8)}（${roleLabel}）`
+  }
+  return `成员 ${userId.slice(0, 8)}`
+}
+
 function getAuthorDisplay(userId: string): string {
   const member = props.members.find((m) => m.user_id === userId)
   if (member) {
@@ -64,6 +95,129 @@ function getAuthorDisplay(userId: string): string {
     return `${userId.slice(0, 8)}...（${roleLabel}）`
   }
   return userId.slice(0, 8) + '...'
+}
+
+function handleTextareaInput(event: Event, mode: 'new' | 'edit') {
+  const textarea = event.target as HTMLTextAreaElement
+  const value = textarea.value
+  const cursorPos = textarea.selectionStart
+
+  const textBeforeCursor = value.slice(0, cursorPos)
+  const atMatch = textBeforeCursor.match(/@([^@\s]*)$/)
+
+  if (atMatch) {
+    mentionFilterText.value = atMatch[1]
+    mentionDropdownMode.value = mode
+    showMentionDropdown.value = true
+
+    const rect = textarea.getBoundingClientRect()
+    const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 20
+    const lines = textBeforeCursor.split('\n')
+    const currentLineIndex = lines.length - 1
+    
+    mentionDropdownPosition.value = {
+      top: rect.top + (currentLineIndex + 1) * lineHeight + 4,
+      left: rect.left + 12,
+    }
+  } else {
+    showMentionDropdown.value = false
+    mentionFilterText.value = ''
+  }
+}
+
+function handleTextareaKeydown(event: KeyboardEvent) {
+  if (showMentionDropdown.value) {
+    if (event.key === 'Escape') {
+      showMentionDropdown.value = false
+      event.preventDefault()
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+    } else if (event.key === 'Enter' && filteredMembers.value.length > 0) {
+      selectMention(filteredMembers.value[0])
+      event.preventDefault()
+    }
+  }
+}
+
+function selectMention(member: FamilyMember) {
+  const displayName = getMemberDisplayName(member.user_id)
+  const mentionText = `@${displayName} `
+  const mentionReq: MentionRequest = {
+    user_id: member.user_id,
+    display_name_snapshot: displayName,
+  }
+
+  if (mentionDropdownMode.value === 'new') {
+    const textarea = newTextareaRef.value
+    if (textarea) {
+      const value = newCommentBody.value
+      const cursorPos = textarea.selectionStart
+      const textBeforeCursor = value.slice(0, cursorPos)
+      const atIndex = textBeforeCursor.lastIndexOf('@')
+      if (atIndex !== -1) {
+        newCommentBody.value = value.slice(0, atIndex) + mentionText + value.slice(cursorPos)
+        if (!newMentions.value.some((m) => m.user_id === member.user_id)) {
+          newMentions.value.push(mentionReq)
+        }
+        nextTick(() => {
+          const newCursorPos = atIndex + mentionText.length
+          textarea.selectionStart = newCursorPos
+          textarea.selectionEnd = newCursorPos
+          textarea.focus()
+        })
+      }
+    }
+  } else {
+    const textarea = editTextareaRef.value
+    if (textarea) {
+      const value = editBody.value
+      const cursorPos = textarea.selectionStart
+      const textBeforeCursor = value.slice(0, cursorPos)
+      const atIndex = textBeforeCursor.lastIndexOf('@')
+      if (atIndex !== -1) {
+        editBody.value = value.slice(0, atIndex) + mentionText + value.slice(cursorPos)
+        if (!editMentions.value.some((m) => m.user_id === member.user_id)) {
+          editMentions.value.push(mentionReq)
+        }
+        nextTick(() => {
+          const newCursorPos = atIndex + mentionText.length
+          textarea.selectionStart = newCursorPos
+          textarea.selectionEnd = newCursorPos
+          textarea.focus()
+        })
+      }
+    }
+  }
+
+  showMentionDropdown.value = false
+  mentionFilterText.value = ''
+}
+
+function removeMention(userId: string, mode: 'new' | 'edit') {
+  if (mode === 'new') {
+    newMentions.value = newMentions.value.filter((m) => m.user_id !== userId)
+  } else {
+    editMentions.value = editMentions.value.filter((m) => m.user_id !== userId)
+  }
+}
+
+function closeMentionDropdown() {
+  showMentionDropdown.value = false
+  mentionFilterText.value = ''
+}
+
+function handleMentionClick(mention: MentionResponse, commentId: string, idx: number) {
+  if (mention.status !== 'active' || mention.user_id === null) return
+  
+  const key = `${commentId}-${idx}`
+  clickedMentionKey.value = key
+  emit('mentionClick', mention.user_id)
+  
+  setTimeout(() => {
+    if (clickedMentionKey.value === key) {
+      clickedMentionKey.value = null
+    }
+  }, 300)
 }
 
 function formatTime(dateStr: string): string {
@@ -124,9 +278,11 @@ async function handleCreate() {
   try {
     const newComment = await createComment(props.familyId, props.storyId, {
       body: newCommentBody.value.trim(),
+      mentions: newMentions.value.length > 0 ? newMentions.value : undefined,
     })
     comments.value = [...comments.value, newComment]
     newCommentBody.value = ''
+    newMentions.value = []
   } catch (err) {
     if (err instanceof CommentApiError) {
       emit('error', err.message)
@@ -142,12 +298,36 @@ function startEdit(comment: CommentResponse) {
   editingCommentId.value = comment.id
   editBody.value = comment.body
   editUpdatedAt.value = comment.updated_at
+  const activeMentions = comment.mentions
+    ?.filter((m): m is MentionResponse & { user_id: string } => m.user_id !== null && m.status === 'active')
+    .map((m) => ({
+      user_id: m.user_id,
+      display_name_snapshot: m.display_name_snapshot,
+    })) ?? []
+  editMentions.value = [...activeMentions]
+  editMentionsOriginal.value = [...activeMentions]
 }
 
 function cancelEdit() {
   editingCommentId.value = null
   editBody.value = ''
   editUpdatedAt.value = ''
+  editMentions.value = []
+  editMentionsOriginal.value = []
+  showMentionDropdown.value = false
+}
+
+function haveMentionsChanged(): boolean {
+  const current = editMentions.value
+  const original = editMentionsOriginal.value
+  if (current.length !== original.length) return true
+  const currentIds = new Set(current.map((m) => m.user_id))
+  const originalIds = new Set(original.map((m) => m.user_id))
+  if (currentIds.size !== originalIds.size) return true
+  for (const id of currentIds) {
+    if (!originalIds.has(id)) return true
+  }
+  return false
 }
 
 async function handleUpdate() {
@@ -156,14 +336,19 @@ async function handleUpdate() {
   submitting.value = true
 
   try {
+    const mentionsChanged = haveMentionsChanged()
+    const updatePayload: { body: string; updated_at: string; mentions?: MentionRequest[] } = {
+      body: editBody.value.trim(),
+      updated_at: editUpdatedAt.value,
+    }
+    if (mentionsChanged) {
+      updatePayload.mentions = editMentions.value
+    }
     const updatedComment = await updateComment(
       props.familyId,
       props.storyId,
       editingCommentId.value,
-      {
-        body: editBody.value.trim(),
-        updated_at: editUpdatedAt.value,
-      },
+      updatePayload,
     )
     comments.value = comments.value.map((c) =>
       c.id === updatedComment.id ? updatedComment : c,
@@ -177,6 +362,14 @@ async function handleUpdate() {
         )
         editBody.value = err.conflictComment.body
         editUpdatedAt.value = err.conflictComment.updated_at
+        const conflictActiveMentions = err.conflictComment.mentions
+          ?.filter((m): m is MentionResponse & { user_id: string } => m.user_id !== null && m.status === 'active')
+          .map((m) => ({
+            user_id: m.user_id,
+            display_name_snapshot: m.display_name_snapshot,
+          })) ?? []
+        editMentions.value = [...conflictActiveMentions]
+        editMentionsOriginal.value = [...conflictActiveMentions]
         emit('error', '评论已被更新，已加载最新内容')
       } else {
         emit('error', err.message)
@@ -225,6 +418,8 @@ watch(
     if (newFamilyId && newStoryId && (newFamilyId !== oldFamilyId || newStoryId !== oldStoryId)) {
       cancelEdit()
       closeDeleteConfirm()
+      closeMentionDropdown()
+      newMentions.value = []
       loadComments()
     }
   },
@@ -235,6 +430,8 @@ onUnmounted(() => {
   comments.value = []
   cancelEdit()
   closeDeleteConfirm()
+  closeMentionDropdown()
+  newMentions.value = []
 })
 
 defineExpose({
@@ -261,12 +458,32 @@ defineExpose({
         <template v-if="editingCommentId === comment.id">
           <div class="comment-edit-form">
             <textarea
+              ref="editTextareaRef"
               v-model="editBody"
               class="comment-textarea"
               rows="3"
               :disabled="submitting"
-              placeholder="编辑评论..."
+              placeholder="编辑评论...（输入 @ 可提及成员）"
+              @input="handleTextareaInput($event, 'edit')"
+              @keydown="handleTextareaKeydown"
             ></textarea>
+            <div v-if="editMentions.length > 0" class="mention-chips">
+              <span
+                v-for="m in editMentions"
+                :key="m.user_id"
+                class="mention-chip"
+              >
+                @{{ m.display_name_snapshot }}
+                <button
+                  type="button"
+                  class="chip-remove"
+                  :disabled="submitting"
+                  @click="removeMention(m.user_id, 'edit')"
+                >
+                  ×
+                </button>
+              </span>
+            </div>
             <p class="char-hint" :class="{ 'hint-error': isEditOverLimit }">
               {{ editCommentCharCount }} / {{ COMMENT_BODY_MAX_LENGTH }} 字
             </p>
@@ -299,6 +516,25 @@ defineExpose({
             </span>
           </div>
           <div class="comment-body">{{ comment.body }}</div>
+          <div v-if="comment.mentions && comment.mentions.length > 0" class="comment-mentions">
+            <template v-for="(mention, idx) in comment.mentions" :key="idx">
+              <button
+                v-if="mention.status === 'active' && mention.user_id !== null"
+                type="button"
+                class="mention-display mention-active"
+                :class="{ 'mention-clicked': clickedMentionKey === `${comment.id}-${idx}` }"
+                @click="handleMentionClick(mention, comment.id, idx)"
+              >
+                @{{ mention.display_name_snapshot }}
+              </button>
+              <span
+                v-else
+                class="mention-display mention-inactive"
+              >
+                @{{ mention.display_name_snapshot }}
+              </span>
+            </template>
+          </div>
           <div class="comment-actions">
             <button
               v-if="canEditComment(comment)"
@@ -323,12 +559,32 @@ defineExpose({
 
     <div v-if="canWrite" class="compose-section">
       <textarea
+        ref="newTextareaRef"
         v-model="newCommentBody"
         class="comment-textarea"
         rows="3"
         :disabled="submitting"
-        placeholder="写下你的评论..."
+        placeholder="写下你的评论...（输入 @ 可提及成员）"
+        @input="handleTextareaInput($event, 'new')"
+        @keydown="handleTextareaKeydown"
       ></textarea>
+      <div v-if="newMentions.length > 0" class="mention-chips">
+        <span
+          v-for="m in newMentions"
+          :key="m.user_id"
+          class="mention-chip"
+        >
+          @{{ m.display_name_snapshot }}
+          <button
+            type="button"
+            class="chip-remove"
+            :disabled="submitting"
+            @click="removeMention(m.user_id, 'new')"
+          >
+            ×
+          </button>
+        </span>
+      </div>
       <p class="char-hint" :class="{ 'hint-error': isNewCommentOverLimit }">
         {{ newCommentCharCount }} / {{ COMMENT_BODY_MAX_LENGTH }} 字
       </p>
@@ -340,6 +596,25 @@ defineExpose({
       >
         {{ submitting ? '发表中…' : '发表评论' }}
       </button>
+    </div>
+
+    <!-- Mention Dropdown -->
+    <div
+      v-if="showMentionDropdown && filteredMembers.length > 0"
+      class="mention-dropdown"
+      :style="{ top: mentionDropdownPosition.top + 'px', left: mentionDropdownPosition.left + 'px' }"
+    >
+      <div class="mention-dropdown-header">选择要提及的成员</div>
+      <ul class="mention-dropdown-list">
+        <li
+          v-for="member in filteredMembers"
+          :key="member.user_id"
+          class="mention-dropdown-item"
+          @click="selectMention(member)"
+        >
+          {{ getMemberDisplayName(member.user_id) }}
+        </li>
+      </ul>
     </div>
 
     <div v-if="deleteConfirmId" class="modal-overlay" @click.self="closeDeleteConfirm">
@@ -631,5 +906,123 @@ defineExpose({
 
 .modal-actions .btn-secondary {
   flex: 1;
+}
+
+/* Mention styles */
+.mention-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.mention-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #e8f0ed;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--color-accent, #2f5d50);
+}
+
+.chip-remove {
+  padding: 0 2px;
+  margin-left: 2px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.chip-remove:hover {
+  color: #c53030;
+}
+
+.chip-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.comment-mentions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mention-display {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.mention-active {
+  background: #e8f0ed;
+  color: var(--color-accent, #2f5d50);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.mention-active:hover {
+  background: #d4e6df;
+  border-color: var(--color-accent, #2f5d50);
+}
+
+.mention-active:active,
+.mention-active.mention-clicked {
+  background: #c0dbd1;
+}
+
+.mention-inactive {
+  background: #f0eeeb;
+  color: #888;
+  cursor: default;
+}
+
+.mention-dropdown {
+  position: fixed;
+  z-index: 100;
+  min-width: 200px;
+  max-width: 300px;
+  max-height: 200px;
+  background: #fff;
+  border: 1px solid var(--color-border, #d8d4cc);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.mention-dropdown-header {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #666;
+  background: #faf9f7;
+  border-bottom: 1px solid var(--color-border, #e8e6e2);
+}
+
+.mention-dropdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.mention-dropdown-item {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+}
+
+.mention-dropdown-item:hover {
+  background: #f5f5f5;
 }
 </style>
