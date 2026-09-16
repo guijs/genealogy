@@ -6,6 +6,7 @@ import com.genealogy.service.StoryService;
 import com.genealogy.web.dto.CreateStoryRequest;
 import com.genealogy.web.dto.DeleteStoryRequest;
 import com.genealogy.web.dto.ErrorResponse;
+import com.genealogy.web.dto.PersonRefRequest;
 import com.genealogy.web.dto.StoriesListResponse;
 import com.genealogy.web.dto.StoryResponse;
 import com.genealogy.web.dto.UpdateStoryRequest;
@@ -117,6 +118,13 @@ public class StoryController {
             return ResponseEntity.badRequest().body(new ErrorResponse("invalid person_ids format"));
         }
 
+        List<StoryService.PersonRefInput> personRefs;
+        try {
+            personRefs = parsePersonRefs(body.getPersonRefs());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+
         try {
             Story story = storyService.createStory(
                     familyId,
@@ -124,13 +132,16 @@ public class StoryController {
                     body.getTitle(),
                     body.getBody(),
                     narrativeTime,
-                    personIds
+                    personIds,
+                    personRefs
             );
             return ResponseEntity.status(201).body(StoryResponse.fromStory(story));
         } catch (StoryService.InvalidBodyException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryService.InvalidPersonException e) {
             return ResponseEntity.status(409).body(new ErrorResponse(e.getMessage()));
+        } catch (StoryService.InvalidPersonRefException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
     }
 
@@ -173,6 +184,13 @@ public class StoryController {
             return ResponseEntity.badRequest().body(new ErrorResponse("invalid person_ids format"));
         }
 
+        List<StoryService.PersonRefInput> personRefs;
+        try {
+            personRefs = parsePersonRefs(body.getPersonRefs());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+
         try {
             Story story = storyService.updateStory(
                     familyId,
@@ -183,6 +201,8 @@ public class StoryController {
                     body.getBody(),
                     narrativeTime,
                     personIds,
+                    personRefs,
+                    body.isPersonRefsProvided(),
                     body.getVersion()
             );
             return ResponseEntity.ok(StoryResponse.fromStory(story));
@@ -196,6 +216,8 @@ public class StoryController {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryService.InvalidPersonException e) {
             return ResponseEntity.status(409).body(new ErrorResponse(e.getMessage()));
+        } catch (StoryService.InvalidPersonRefException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
     }
 
@@ -249,5 +271,25 @@ public class StoryController {
             }
         }
         return result;
+    }
+
+    private List<StoryService.PersonRefInput> parsePersonRefs(List<PersonRefRequest> personRefRequests) {
+        if (personRefRequests == null || personRefRequests.isEmpty()) {
+            return null;
+        }
+
+        return personRefRequests.stream()
+                .map(r -> {
+                    UUID personId = null;
+                    if (r.getPersonId() != null && !r.getPersonId().isBlank()) {
+                        try {
+                            personId = UUID.fromString(r.getPersonId());
+                        } catch (IllegalArgumentException e) {
+                            throw new IllegalArgumentException("invalid person_id format");
+                        }
+                    }
+                    return new StoryService.PersonRefInput(personId, r.getDisplayNameSnapshot());
+                })
+                .collect(Collectors.toList());
     }
 }

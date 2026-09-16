@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -112,6 +113,13 @@ public class StoryCommentController {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
 
+        List<StoryCommentService.PersonRefInput> personRefs;
+        try {
+            personRefs = parsePersonRefs(body.getPersonRefs());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+
         try {
             StoryComment comment = commentService.createComment(
                     familyId,
@@ -119,6 +127,7 @@ public class StoryCommentController {
                     membership.getUserId(),
                     body.getBody(),
                     mentions,
+                    personRefs,
                     membership.getRole()
             );
             return ResponseEntity.status(201).body(CommentResponse.fromComment(comment));
@@ -127,6 +136,8 @@ public class StoryCommentController {
         } catch (StoryCommentService.InvalidBodyException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.InvalidMentionException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (StoryCommentService.InvalidPersonRefException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.PermissionDeniedException e) {
             return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
@@ -175,6 +186,13 @@ public class StoryCommentController {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
 
+        List<StoryCommentService.PersonRefInput> personRefs;
+        try {
+            personRefs = parsePersonRefs(body.getPersonRefs());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
+
         try {
             StoryComment comment = commentService.updateComment(
                     familyId,
@@ -183,6 +201,8 @@ public class StoryCommentController {
                     membership.getUserId(),
                     body.getBody(),
                     mentions,
+                    personRefs,
+                    body.isPersonRefsProvided(),
                     expectedUpdatedAt,
                     membership.getRole()
             );
@@ -194,6 +214,8 @@ public class StoryCommentController {
         } catch (StoryCommentService.InvalidBodyException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.InvalidMentionException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (StoryCommentService.InvalidPersonRefException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (StoryCommentService.PermissionDeniedException e) {
             return ResponseEntity.status(403).body(new ErrorResponse(e.getMessage()));
@@ -261,6 +283,26 @@ public class StoryCommentController {
                         }
                     }
                     return new StoryCommentService.MentionInput(userId, m.getDisplayNameSnapshot());
+                })
+                .collect(Collectors.toList());
+    }
+
+    private List<StoryCommentService.PersonRefInput> parsePersonRefs(List<PersonRefRequest> personRefRequests) {
+        if (personRefRequests == null || personRefRequests.isEmpty()) {
+            return null;
+        }
+
+        return personRefRequests.stream()
+                .map(r -> {
+                    UUID personId = null;
+                    if (r.getPersonId() != null && !r.getPersonId().isBlank()) {
+                        try {
+                            personId = UUID.fromString(r.getPersonId());
+                        } catch (IllegalArgumentException e) {
+                            throw new IllegalArgumentException("invalid person_id format");
+                        }
+                    }
+                    return new StoryCommentService.PersonRefInput(personId, r.getDisplayNameSnapshot());
                 })
                 .collect(Collectors.toList());
     }

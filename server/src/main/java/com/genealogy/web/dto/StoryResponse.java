@@ -24,6 +24,9 @@ public class StoryResponse {
     @JsonProperty("person_ids")
     private final List<String> personIds;
 
+    @JsonProperty("person_refs")
+    private final List<PersonRefResponse> personRefs;
+
     @JsonProperty("narrative_time")
     private final String narrativeTime;
 
@@ -42,14 +45,15 @@ public class StoryResponse {
     private final int version;
 
     public StoryResponse(String id, String familyId, String title, String body,
-                         List<String> personIds, String narrativeTime,
-                         String createdBy, String updatedBy,
+                         List<String> personIds, List<PersonRefResponse> personRefs,
+                         String narrativeTime, String createdBy, String updatedBy,
                          String createdAt, String updatedAt, int version) {
         this.id = id;
         this.familyId = familyId;
         this.title = title;
         this.body = body;
         this.personIds = personIds;
+        this.personRefs = personRefs;
         this.narrativeTime = narrativeTime;
         this.createdBy = createdBy;
         this.updatedBy = updatedBy;
@@ -59,12 +63,17 @@ public class StoryResponse {
     }
 
     public static StoryResponse fromStory(Story story) {
+        List<PersonRefResponse> personRefResponses = story.getPersonRefs().stream()
+                .map(PersonRefResponse::fromStoryPersonRef)
+                .collect(Collectors.toList());
+
         return new StoryResponse(
                 story.getId().toString(),
                 story.getFamilyId().toString(),
                 story.getTitle(),
                 story.getBody(),
                 story.getPersonIds().stream().map(Object::toString).collect(Collectors.toList()),
+                personRefResponses.isEmpty() ? null : personRefResponses,
                 story.getNarrativeTime() != null ? story.getNarrativeTime().format(DATE_FORMATTER) : null,
                 story.getCreatedBy().toString(),
                 story.getUpdatedBy().toString(),
@@ -92,6 +101,10 @@ public class StoryResponse {
 
     public List<String> getPersonIds() {
         return personIds;
+    }
+
+    public List<PersonRefResponse> getPersonRefs() {
+        return personRefs;
     }
 
     public String getNarrativeTime() {

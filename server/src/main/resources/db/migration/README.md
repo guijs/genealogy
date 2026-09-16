@@ -24,5 +24,9 @@ V{version}__{description}.sql
 | V3 | 始祖（progenitor）支持 |
 | V4 | 世代名称（generation names） |
 | V5 | 故事（stories）功能 |
+| V6 | 故事评论（story_comments）功能 |
+| V7 | 故事评论 v0.2（移除回复、添加 updated_at） |
+| V8 | 评论 @提及（comment_mentions）功能 |
+| V9 | 人物引用（person_refs）功能 |
 
 迁移会在 Spring Boot 启动时通过 `flyway.baseline-on-migrate: true` 自动执行。

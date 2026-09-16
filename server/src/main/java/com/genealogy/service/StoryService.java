@@ -69,11 +69,20 @@ public class StoryService {
         }
     }
 
+    public static class InvalidPersonRefException extends RuntimeException {
+        public InvalidPersonRefException(String message) {
+            super(message);
+        }
+    }
+
+    public record PersonRefInput(UUID personId, String displayNameSnapshot) {}
+
     @Transactional
     public Story createStory(UUID familyId, UUID creatorId, String title, String body,
-                             LocalDate narrativeTime, List<UUID> personIds) {
+                             LocalDate narrativeTime, List<UUID> personIds, List<PersonRefInput> personRefs) {
         validateBody(body);
         validatePersonIds(familyId, personIds);
+        validatePersonRefs(familyId, personRefs);
 
         UUID storyId = UUID.randomUUID();
         Story story = new Story(
@@ -90,14 +99,27 @@ public class StoryService {
                 personIds != null ? personIds : List.of()
         );
 
-        storyStore.createStory(story);
+        List<StoryStore.PersonRefInput> storePersonRefs = personRefs != null
+                ? personRefs.stream()
+                    .map(r -> new StoryStore.PersonRefInput(r.personId(), r.displayNameSnapshot()))
+                    .collect(Collectors.toList())
+                : null;
+
+        storyStore.createStory(story, storePersonRefs);
         return storyStore.getStory(storyId).orElseThrow(StoryNotFoundException::new);
+    }
+
+    @Transactional
+    public Story createStory(UUID familyId, UUID creatorId, String title, String body,
+                             LocalDate narrativeTime, List<UUID> personIds) {
+        return createStory(familyId, creatorId, title, body, narrativeTime, personIds, null);
     }
 
     @Transactional
     public Story updateStory(UUID familyId, UUID storyId, UUID updaterId, Role role,
                              String title, String body, LocalDate narrativeTime,
-                             List<UUID> personIds, int expectedVersion) {
+                             List<UUID> personIds, List<PersonRefInput> personRefs,
+                             boolean personRefsProvided, int expectedVersion) {
         if (role == null || !role.canWrite()) {
             throw new WriteAccessDeniedException();
         }
@@ -115,6 +137,9 @@ public class StoryService {
 
         validateBody(body);
         validatePersonIds(familyId, personIds);
+        if (personRefsProvided) {
+            validatePersonRefs(familyId, personRefs);
+        }
 
         Story updated = new Story(
                 storyId,
@@ -130,7 +155,13 @@ public class StoryService {
                 personIds != null ? personIds : List.of()
         );
 
-        StoryStore.WriteResult result = storyStore.updateStory(updated, expectedVersion);
+        List<StoryStore.PersonRefInput> storePersonRefs = personRefs != null
+                ? personRefs.stream()
+                    .map(r -> new StoryStore.PersonRefInput(r.personId(), r.displayNameSnapshot()))
+                    .collect(Collectors.toList())
+                : null;
+
+        StoryStore.WriteResult result = storyStore.updateStory(updated, expectedVersion, storePersonRefs, personRefsProvided);
         if (result instanceof StoryStore.WriteResult.NotFound) {
             throw new StoryNotFoundException();
         } else if (result instanceof StoryStore.WriteResult.VersionConflict conflict) {
@@ -138,6 +169,14 @@ public class StoryService {
         }
 
         return storyStore.getStory(storyId).orElseThrow(StoryNotFoundException::new);
+    }
+
+    @Transactional
+    public Story updateStory(UUID familyId, UUID storyId, UUID updaterId, Role role,
+                             String title, String body, LocalDate narrativeTime,
+                             List<UUID> personIds, int expectedVersion) {
+        return updateStory(familyId, storyId, updaterId, role, title, body, narrativeTime,
+                personIds, null, false, expectedVersion);
     }
 
     @Transactional
@@ -230,6 +269,24 @@ public class StoryService {
         for (UUID personId : personIds) {
             if (!personStore.existsInFamily(personId, familyId)) {
                 throw new InvalidPersonException("person " + personId + " not found in family");
+            }
+        }
+    }
+
+    private void validatePersonRefs(UUID familyId, List<PersonRefInput> personRefs) {
+        if (personRefs == null || personRefs.isEmpty()) {
+            return;
+        }
+
+        for (PersonRefInput ref : personRefs) {
+            if (ref.personId() == null) {
+                throw new InvalidPersonRefException("person_ref person_id is required");
+            }
+            if (ref.displayNameSnapshot() == null || ref.displayNameSnapshot().isBlank()) {
+                throw new InvalidPersonRefException("person_ref display_name_snapshot is required");
+            }
+            if (!personStore.existsInFamily(ref.personId(), familyId)) {
+                throw new InvalidPersonRefException("referenced person is not in this family or has been deleted");
             }
         }
     }

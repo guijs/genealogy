@@ -2,6 +2,7 @@ package com.genealogy.domain.story;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,10 +18,18 @@ public class Story {
     private final Instant updatedAt;
     private final int version;
     private final List<UUID> personIds;
+    private final List<StoryPersonRef> personRefs;
 
     public Story(UUID id, UUID familyId, String title, String body, LocalDate narrativeTime,
                  UUID createdBy, UUID updatedBy, Instant createdAt, Instant updatedAt,
                  int version, List<UUID> personIds) {
+        this(id, familyId, title, body, narrativeTime, createdBy, updatedBy, createdAt, updatedAt,
+             version, personIds, Collections.emptyList());
+    }
+
+    public Story(UUID id, UUID familyId, String title, String body, LocalDate narrativeTime,
+                 UUID createdBy, UUID updatedBy, Instant createdAt, Instant updatedAt,
+                 int version, List<UUID> personIds, List<StoryPersonRef> personRefs) {
         this.id = id;
         this.familyId = familyId;
         this.title = title;
@@ -32,6 +41,7 @@ public class Story {
         this.updatedAt = updatedAt;
         this.version = version;
         this.personIds = personIds != null ? List.copyOf(personIds) : List.of();
+        this.personRefs = personRefs != null ? personRefs : Collections.emptyList();
     }
 
     public UUID getId() {
@@ -76,6 +86,10 @@ public class Story {
 
     public List<UUID> getPersonIds() {
         return personIds;
+    }
+
+    public List<StoryPersonRef> getPersonRefs() {
+        return personRefs;
     }
 
     public boolean isFamilyScoped() {
