@@ -297,6 +297,58 @@ export interface GenerationNamesResponse {
 }
 
 /**
+ * Person Reference types (PR#65)
+ *
+ * person_refs are structured references to family tree persons within stories/comments.
+ * Distinct from mentions (user_id based member mentions).
+ * Uses snake_case JSON, Bearer auth.
+ */
+
+/**
+ * Person reference status indicating person's current visibility.
+ * - active: Person is visible in the family tree (clickable)
+ * - hidden: Person is hidden (not clickable, show snapshot with inactive style)
+ * - deleted: Person is soft-deleted (not clickable, show snapshot with inactive style)
+ */
+export type PersonRefStatus = 'active' | 'hidden' | 'deleted'
+
+/**
+ * Person reference request payload for creating/updating stories/comments.
+ * Only structured refs from picker are sent; plain #text is not auto-parsed.
+ */
+export interface PersonRefRequest {
+  person_id: string
+  display_name_snapshot: string
+}
+
+/**
+ * Person reference response payload returned from the server.
+ * - person_id may be null if the person was hard-deleted
+ * - status indicates current person visibility
+ * - clickable indicates whether UI should allow navigation to person detail
+ */
+export interface PersonRefResponse {
+  person_id: string | null
+  display_name_snapshot: string
+  status: PersonRefStatus
+  clickable: boolean
+}
+
+/**
+ * Person reference candidate for picker.
+ * GET /api/v1/families/{familyId}/person-ref-candidates
+ */
+export interface PersonRefCandidate {
+  person_id: string
+  display_name: string
+  deceased: boolean
+}
+
+export interface PersonRefCandidatesResponse {
+  candidates: PersonRefCandidate[]
+}
+
+/**
  * Story API types (PR#49, PR#50)
  *
  * Stories are family-scoped narratives that can optionally be linked to specific persons.
@@ -315,6 +367,7 @@ export interface StoryResponse {
   created_at: string
   updated_at: string
   version: number
+  person_refs?: PersonRefResponse[]
 }
 
 export interface CreateStoryRequest {
@@ -322,6 +375,7 @@ export interface CreateStoryRequest {
   body: string
   narrative_time?: string | null
   person_ids?: string[]
+  person_refs?: PersonRefRequest[]
 }
 
 export interface UpdateStoryRequest {
@@ -329,6 +383,7 @@ export interface UpdateStoryRequest {
   body?: string
   narrative_time?: string | null
   person_ids?: string[]
+  person_refs?: PersonRefRequest[]
   version: number
 }
 
@@ -384,17 +439,20 @@ export interface CommentResponse {
   created_at: string
   updated_at: string
   mentions?: MentionResponse[]
+  person_refs?: PersonRefResponse[]
 }
 
 export interface CreateCommentRequest {
   body: string
   mentions?: MentionRequest[]
+  person_refs?: PersonRefRequest[]
 }
 
 export interface UpdateCommentRequest {
   body: string
   updated_at: string
   mentions?: MentionRequest[]
+  person_refs?: PersonRefRequest[]
 }
 
 export interface CommentsListResponse {

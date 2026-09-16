@@ -8,7 +8,7 @@ import {
   CommentApiError,
   COMMENT_BODY_MAX_LENGTH,
 } from './commentClient'
-import type { CommentResponse, MentionRequest, MentionResponse } from './types'
+import type { CommentResponse, MentionRequest, MentionResponse, PersonRefRequest, PersonRefResponse } from './types'
 
 const mockLocalStorage = (() => {
   let store: Record<string, string> = {}
@@ -88,6 +88,13 @@ describe('commentClient', () => {
       expect(error.status).toBe(400)
       expect(error.code).toBe('INVALID_MENTION')
       expect(error.message).toBe('提及的成员无效或不是当前家族成员')
+    })
+
+    it('creates invalid person ref error with Chinese message', () => {
+      const error = CommentApiError.invalidPersonRef()
+      expect(error.status).toBe(400)
+      expect(error.code).toBe('INVALID_PERSON_REF')
+      expect(error.message).toBe('引用的人物无效或不存在于当前家族')
     })
   })
 
@@ -327,6 +334,90 @@ describe('commentClient', () => {
         expect(err.message).toBe('提及的成员无效或不是当前家族成员')
       }
     })
+
+    it('sends person_refs in request body', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      const personRefs: PersonRefRequest[] = [
+        { person_id: 'person-1', display_name_snapshot: '张三' },
+      ]
+
+      const commentWithRefs: CommentResponse = {
+        ...mockComment,
+        person_refs: [
+          { person_id: 'person-1', display_name_snapshot: '张三', status: 'active', clickable: true },
+        ],
+      }
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(commentWithRefs),
+      } as Response)
+
+      const result = await createComment('family-1', 'story-1', {
+        body: 'Comment with #张三',
+        person_refs: personRefs,
+      })
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"person_refs"'),
+        }),
+      )
+      expect(result.person_refs).toBeDefined()
+      expect(result.person_refs?.length).toBe(1)
+    })
+
+    it('handles 400 error with invalid person_refs', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+      } as Response)
+
+      const invalidRefs: PersonRefRequest[] = [
+        { person_id: 'non-existent', display_name_snapshot: 'Unknown' },
+      ]
+
+      try {
+        await createComment('family-1', 'story-1', {
+          body: 'Comment with #Unknown',
+          person_refs: invalidRefs,
+        })
+        expect.fail('Expected error to be thrown')
+      } catch (e) {
+        expect(e).toBeInstanceOf(CommentApiError)
+        const err = e as CommentApiError
+        expect(err.status).toBe(400)
+        expect(err.code).toBe('INVALID_PERSON_REF')
+        expect(err.message).toBe('引用的人物无效或不存在于当前家族')
+      }
+    })
+
+    it('creates comment without person_refs (omit)', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockComment),
+      } as Response)
+
+      await createComment('family-1', 'story-1', {
+        body: 'Comment without refs',
+      })
+
+      const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)
+      expect(callBody.person_refs).toBeUndefined()
+    })
   })
 
   describe('updateComment', () => {
@@ -509,6 +600,118 @@ describe('commentClient', () => {
         expect(err.status).toBe(400)
         expect(err.code).toBe('INVALID_MENTION')
         expect(err.message).toBe('提及的成员无效或不是当前家族成员')
+      }
+    })
+
+    it('sends person_refs in update request when provided', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      const personRefs: PersonRefRequest[] = [
+        { person_id: 'person-1', display_name_snapshot: '张三' },
+      ]
+
+      const commentWithRefs: CommentResponse = {
+        ...mockComment,
+        updated_at: '2024-01-02T10:00:00Z',
+        person_refs: [
+          { person_id: 'person-1', display_name_snapshot: '张三', status: 'active', clickable: true },
+        ],
+      }
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(commentWithRefs),
+      } as Response)
+
+      const result = await updateComment('family-1', 'story-1', 'comment-1', {
+        body: 'Updated with #张三',
+        updated_at: '2024-01-01T10:00:00Z',
+        person_refs: personRefs,
+      })
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'PUT',
+          body: expect.stringContaining('"person_refs"'),
+        }),
+      )
+      expect(result.person_refs).toBeDefined()
+    })
+
+    it('clears person_refs when empty array provided', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      const commentWithoutRefs: CommentResponse = {
+        ...mockComment,
+        updated_at: '2024-01-02T10:00:00Z',
+        person_refs: [],
+      }
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(commentWithoutRefs),
+      } as Response)
+
+      await updateComment('family-1', 'story-1', 'comment-1', {
+        body: 'Clear refs',
+        updated_at: '2024-01-01T10:00:00Z',
+        person_refs: [],
+      })
+
+      const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)
+      expect(callBody.person_refs).toEqual([])
+    })
+
+    it('omits person_refs field when undefined (no change)', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ...mockComment, updated_at: '2024-01-02T10:00:00Z' }),
+      } as Response)
+
+      await updateComment('family-1', 'story-1', 'comment-1', {
+        body: 'Update without touching refs',
+        updated_at: '2024-01-01T10:00:00Z',
+      })
+
+      const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)
+      expect(callBody.person_refs).toBeUndefined()
+    })
+
+    it('handles 400 error with invalid person_refs on update', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+      } as Response)
+
+      const invalidRefs: PersonRefRequest[] = [
+        { person_id: 'deleted-person', display_name_snapshot: 'Deleted' },
+      ]
+
+      try {
+        await updateComment('family-1', 'story-1', 'comment-1', {
+          body: 'Update with #Deleted',
+          updated_at: '2024-01-01T10:00:00Z',
+          person_refs: invalidRefs,
+        })
+        expect.fail('Expected error to be thrown')
+      } catch (e) {
+        expect(e).toBeInstanceOf(CommentApiError)
+        const err = e as CommentApiError
+        expect(err.status).toBe(400)
+        expect(err.code).toBe('INVALID_PERSON_REF')
       }
     })
   })

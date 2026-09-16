@@ -9,7 +9,7 @@ import {
   StoryApiError,
   STORY_BODY_MAX_LENGTH,
 } from './storyClient'
-import type { StoryResponse } from './types'
+import type { StoryResponse, PersonRefRequest, PersonRefResponse } from './types'
 
 const mockLocalStorage = (() => {
   let store: Record<string, string> = {}
@@ -99,6 +99,13 @@ describe('storyClient', () => {
     it('creates version required error', () => {
       const error = StoryApiError.versionRequired()
       expect(error.code).toBe('VERSION_REQUIRED')
+    })
+
+    it('creates invalid person ref error with Chinese message', () => {
+      const error = StoryApiError.invalidPersonRef()
+      expect(error.status).toBe(400)
+      expect(error.code).toBe('INVALID_PERSON_REF')
+      expect(error.message).toBe('引用的人物无效或不存在于当前家族')
     })
   })
 
@@ -284,6 +291,91 @@ describe('storyClient', () => {
         createStory('family-1', { body: 'Test body' }),
       ).rejects.toThrow('没有编辑权限')
     })
+
+    it('sends person_refs in request body', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      const personRefs: PersonRefRequest[] = [
+        { person_id: 'person-1', display_name_snapshot: '张三' },
+      ]
+
+      const storyWithRefs: StoryResponse = {
+        ...mockStory,
+        person_refs: [
+          { person_id: 'person-1', display_name_snapshot: '张三', status: 'active', clickable: true },
+        ],
+      }
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(storyWithRefs),
+      } as Response)
+
+      const result = await createStory('family-1', {
+        body: 'Story with person refs',
+        person_refs: personRefs,
+      })
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"person_refs"'),
+        }),
+      )
+      expect(result.person_refs).toBeDefined()
+      expect(result.person_refs?.length).toBe(1)
+      expect(result.person_refs?.[0].person_id).toBe('person-1')
+    })
+
+    it('handles 400 error with invalid person_refs', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+      } as Response)
+
+      const invalidRefs: PersonRefRequest[] = [
+        { person_id: 'non-existent', display_name_snapshot: 'Unknown' },
+      ]
+
+      try {
+        await createStory('family-1', {
+          body: 'Story with invalid refs',
+          person_refs: invalidRefs,
+        })
+        expect.fail('Expected error to be thrown')
+      } catch (e) {
+        expect(e).toBeInstanceOf(StoryApiError)
+        const err = e as StoryApiError
+        expect(err.status).toBe(400)
+        expect(err.code).toBe('INVALID_PERSON_REF')
+        expect(err.message).toBe('引用的人物无效或不存在于当前家族')
+      }
+    })
+
+    it('creates story without person_refs (omit)', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockStory),
+      } as Response)
+
+      await createStory('family-1', {
+        body: 'Story without person refs',
+      })
+
+      const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)
+      expect(callBody.person_refs).toBeUndefined()
+    })
   })
 
   describe('updateStory', () => {
@@ -368,6 +460,118 @@ describe('storyClient', () => {
         expect(err.conflictStory!.version).toBe(2)
         expect(err.conflictStory!.body).toBe('Someone else updated this')
         expect(err.message).toBe('内容已被他人更新，已加载最新版本')
+      }
+    })
+
+    it('sends person_refs in update request when provided', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      const personRefs: PersonRefRequest[] = [
+        { person_id: 'person-1', display_name_snapshot: '张三' },
+      ]
+
+      const storyWithRefs: StoryResponse = {
+        ...mockStory,
+        version: 2,
+        person_refs: [
+          { person_id: 'person-1', display_name_snapshot: '张三', status: 'active', clickable: true },
+        ],
+      }
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(storyWithRefs),
+      } as Response)
+
+      const result = await updateStory('family-1', 'story-1', {
+        body: 'Updated with refs',
+        version: 1,
+        person_refs: personRefs,
+      })
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'PUT',
+          body: expect.stringContaining('"person_refs"'),
+        }),
+      )
+      expect(result.person_refs).toBeDefined()
+    })
+
+    it('clears person_refs when empty array provided', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      const storyWithoutRefs: StoryResponse = {
+        ...mockStory,
+        version: 2,
+        person_refs: [],
+      }
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(storyWithoutRefs),
+      } as Response)
+
+      await updateStory('family-1', 'story-1', {
+        body: 'Clear refs',
+        version: 1,
+        person_refs: [],
+      })
+
+      const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)
+      expect(callBody.person_refs).toEqual([])
+    })
+
+    it('omits person_refs field when undefined (no change)', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ...mockStory, version: 2 }),
+      } as Response)
+
+      await updateStory('family-1', 'story-1', {
+        body: 'Update without touching refs',
+        version: 1,
+      })
+
+      const callBody = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)
+      expect(callBody.person_refs).toBeUndefined()
+    })
+
+    it('handles 400 error with invalid person_refs on update', async () => {
+      import.meta.env.VITE_USE_GRAPH_API = 'true'
+      import.meta.env.VITE_GRAPH_API_BASE = 'http://localhost:8080'
+      mockLocalStorage.setItem('auth_token', 'test-token')
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+      } as Response)
+
+      const invalidRefs: PersonRefRequest[] = [
+        { person_id: 'deleted-person', display_name_snapshot: 'Deleted' },
+      ]
+
+      try {
+        await updateStory('family-1', 'story-1', {
+          body: 'Update with invalid refs',
+          version: 1,
+          person_refs: invalidRefs,
+        })
+        expect.fail('Expected error to be thrown')
+      } catch (e) {
+        expect(e).toBeInstanceOf(StoryApiError)
+        const err = e as StoryApiError
+        expect(err.status).toBe(400)
+        expect(err.code).toBe('INVALID_PERSON_REF')
       }
     })
   })

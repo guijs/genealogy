@@ -91,6 +91,14 @@ export class StoryApiError extends Error {
     )
   }
 
+  static invalidPersonRef(): StoryApiError {
+    return new StoryApiError(
+      '引用的人物无效或不存在于当前家族',
+      400,
+      'INVALID_PERSON_REF',
+    )
+  }
+
   static versionRequired(): StoryApiError {
     return new StoryApiError(
       '更新或删除故事需要提供版本号',
@@ -243,6 +251,9 @@ export async function createStory(
   })
 
   if (!res.ok) {
+    if (res.status === 400 && data.person_refs && data.person_refs.length > 0) {
+      throw StoryApiError.invalidPersonRef()
+    }
     throw StoryApiError.fromStatus(res.status, 'create')
   }
 
@@ -289,6 +300,9 @@ export async function updateStory(
     if (res.status === 409) {
       const currentStory = (await res.json()) as StoryResponse
       throw StoryApiError.versionConflict(currentStory)
+    }
+    if (res.status === 400 && data.person_refs && data.person_refs.length > 0) {
+      throw StoryApiError.invalidPersonRef()
     }
     throw StoryApiError.fromStatus(res.status, 'update')
   }
