@@ -220,7 +220,8 @@ async function handleDelete() {
 
 watch(
   () => [props.familyId, props.storyId],
-  ([newFamilyId, newStoryId], [oldFamilyId, oldStoryId]) => {
+  ([newFamilyId, newStoryId], oldValue) => {
+    const [oldFamilyId, oldStoryId] = oldValue ?? []
     if (newFamilyId && newStoryId && (newFamilyId !== oldFamilyId || newStoryId !== oldStoryId)) {
       cancelEdit()
       closeDeleteConfirm()
